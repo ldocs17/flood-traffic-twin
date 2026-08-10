@@ -9,7 +9,7 @@ slice per loop iteration; the orchestrator verifies before checking it off here.
 | 1 | Walking skeleton — vehicles detour around the flooded block | SG1 | **done** |
 | 2 | Real forecasts, real curve — full 60-minute coupling | SG1 | **done** |
 | 3 | Baseline comparison and first research figure | SG2 | **done** |
-| 4 | Information sweep — the headline result | SG2 | pending |
+| 4 | Information sweep — the headline result | SG2 | **done** |
 | 5 | Web replay of a completed run | SG3 | pending |
 | 6 | Run from the browser | SG3 | pending |
 | 7 | Calibrated demand | SG4 | pending |
@@ -93,3 +93,22 @@ on `main`. `PROGRESS.md` is still orchestrator-owned — subagents never edit it
   99/1335 closed-edge / 286/1335 wet-edge, 0 teleports/collisions both runs). Opened
   the generated PNG and visually confirmed the right-shifted, longer-tailed flooded
   distribution. Squash-merged via `gh pr merge --squash --delete-branch`.
+
+- **2026-08-10, Slice 4 done — headline result.** `src/floodtwin/analysis/sweep.py`:
+  parameterized `--device.rerouting.probability` (was hardcoded 100% since Slice 1),
+  swept {0,25,50,75,100}% × 3 seeds (30 SUMO runs), baseline re-run per point (not
+  shared across the sweep — documented reasoning: SUMO's rerouting device affects the
+  no-flood case too). **Operational note**: the implementing subagent's background
+  sweep process died at 3/15 points when its session ended — no live process, log
+  stalled at ~124 min of subagent wall time with only ~2 min of actual sweep progress.
+  Rather than resume the exhausted agent, the orchestrator re-ran the sweep directly
+  (fresh checkout, 143.5s for all 15 points) and finished commit/push/PR itself — worth
+  remembering for future slices with a long-running batch step: prefer having the
+  *orchestrator* run the expensive final verification pass in its own properly-monitored
+  background shell rather than trusting a subagent's self-managed background process to
+  survive to the end of its turn. [PR #2](https://github.com/ldocs17/flood-traffic-twin/pull/2).
+  Result (`Sep_30_2022_74.75`, base_seed=42): mean travel-time delta drops 77.7s→26.2s
+  and p95 drops 371.7s→111.7s as rerouting goes 0%→100%, monotonic with tight seed
+  variance (no reversals) — traveler information clearly mitigates flood disruption,
+  and more so in the tail than the mean. 57/57 tests pass; CI green; figure/CSV/JSON
+  verified by independent re-run.
