@@ -10,7 +10,7 @@ slice per loop iteration; the orchestrator verifies before checking it off here.
 | 2 | Real forecasts, real curve — full 60-minute coupling | SG1 | **done** |
 | 3 | Baseline comparison and first research figure | SG2 | **done** |
 | 4 | Information sweep — the headline result | SG2 | **done** |
-| 5 | Web replay of a completed run | SG3 | pending |
+| 5 | Web replay of a completed run | SG3 | **done** |
 | 6 | Run from the browser | SG3 | pending |
 | 7 | Calibrated demand | SG4 | pending |
 | 8 | Sensitivity and robustness | SG4 | pending |
@@ -112,3 +112,23 @@ on `main`. `PROGRESS.md` is still orchestrator-owned — subagents never edit it
   variance (no reversals) — traveler information clearly mitigates flood disruption,
   and more so in the tail than the mean. 57/57 tests pass; CI green; figure/CSV/JSON
   verified by independent re-run.
+
+- **2026-08-10, Slice 5 done — web replay.** `src/floodtwin/api/` (FastAPI: `/api/runs`,
+  `/api/runs/{id}/config`, `/api/runs/{id}/fcd`, `/api/runs/{id}/edge_states`,
+  `/api/network`, `/api/runs/{id}/flood/frames`, `/api/runs/{id}/flood/{i}.png`) +
+  `web/` (static MapLibre GL JS page, no build step, run picker + time scrubber + flood
+  overlay + edge coloring + animated FCD positions). 84/84 tests pass (27 new).
+  [PR #3](https://github.com/ldocs17/flood-traffic-twin/pull/3). Verified independently:
+  started the server myself, hit every endpoint with real requests (948-edge network
+  GeoJSON, real flood PNG viewed and visually sane, `bounds_match_georef: true` with
+  bounds matching IMPLEMENTATION_CONTEXT.md §2 exactly, path-traversal rejected).
+  **Known environment limitation** (hit independently by both the subagent and the
+  orchestrator): this sandbox's browser pane doesn't composite frames unless actively
+  displayed, so MapLibre's `style.load` event never fires and the map canvas can't be
+  screenshotted here — confirmed via `map.isStyleLoaded()` → `false` and `addSource`
+  throwing "Style is not done loading." This is standard MapLibre gating behavior, not
+  an app bug (the app correctly waits for `map.on('load', ...)` per MapLibre's own
+  best practice). Worked around by manually replicating the run-list population logic
+  in the live console, which worked correctly. **Recommend a manual spot-check in a
+  normal desktop browser** before relying on this for the paper demo — neither agent
+  could get a real pixel screenshot of the rendered map in this environment.
