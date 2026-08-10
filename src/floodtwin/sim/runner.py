@@ -41,6 +41,15 @@ CLOSURE_TIME_S = 900.0  # t = 15 min -- the model's first output frame (D3/D4)
 DEFAULT_SEED = 42
 FRAME_INDEX = 0  # index 0 of the (128,128,4) stack = t+15 min
 
+# Slice 4 (D5 sweep parameter): fraction of vehicles carrying the rerouting
+# device, i.e. ``--device.rerouting.probability``. Slices 1-2 hardcoded this
+# at 1.0 (100%) "the simplest setting for the skeleton" (Plan Slice 1). That
+# value is preserved here as the default so existing single-run CLI/API
+# usage (``run_baseline()``, ``run_flooded_multiframe()`` called with no
+# explicit fraction) is unaffected -- only Slice 4's sweep code passes a
+# different value.
+DEFAULT_REROUTING_FRACTION = 1.0
+
 # --- Slice 2: full 60-minute coupling -------------------------------------
 FRAME_MARKS_S = (900.0, 1800.0, 2700.0, 3600.0)  # t+15/30/45/60 min
 FRAME_LABELS = ("t+15min", "t+30min", "t+45min", "t+60min")
@@ -50,7 +59,9 @@ FRAME_LABELS = ("t+15min", "t+30min", "t+45min", "t+60min")
 DEFAULT_SCENARIO_NAME = "Sep_30_2022_74.75"
 
 
-def _base_sumo_cmd(seed: int, extra_outputs: dict) -> List[str]:
+def _base_sumo_cmd(
+    seed: int, extra_outputs: dict, rerouting_fraction: float = DEFAULT_REROUTING_FRACTION
+) -> List[str]:
     cmd = [
         sumo_binary("sumo"),
         "--net-file", str(paths.NET_FILE),
@@ -59,7 +70,7 @@ def _base_sumo_cmd(seed: int, extra_outputs: dict) -> List[str]:
         "--end", str(paths.SIM_END_S),
         "--seed", str(seed),
         "--time-to-teleport", "-1",
-        "--device.rerouting.probability", "1.0",
+        "--device.rerouting.probability", str(rerouting_fraction),
         "--device.rerouting.period", "120",
         "--no-step-log", "true",
         # A small-district flood closure can isolate a pocket of edges with
@@ -84,9 +95,19 @@ def compute_edge_states(net, scenario_npy: Path, frame_index: int = FRAME_INDEX)
     return depths, closed
 
 
-def run_baseline(seed: int = DEFAULT_SEED) -> Path:
+def run_baseline(
+    seed: int = DEFAULT_SEED, rerouting_fraction: float = DEFAULT_REROUTING_FRACTION
+) -> Path:
     """Plain (no-TraCI) baseline run: same net/demand/rerouting settings as
-    the flooded run, but no edge closures."""
+    the flooded run, but no edge closures.
+
+    ``rerouting_fraction`` (Slice 4, D5): fraction of vehicles carrying the
+    rerouting device (``--device.rerouting.probability``). Passed through
+    (not hardcoded) so a Slice-4 sweep can hold this fixed between a
+    baseline/flooded pair at each fraction -- see
+    ``floodtwin.analysis.sweep`` for why the baseline is swept too, not just
+    the flooded run.
+    """
     run_dir = artifact.make_run_dir("baseline")
     outputs = {
         "--fcd-output": run_dir / "fcd.xml",
@@ -94,7 +115,7 @@ def run_baseline(seed: int = DEFAULT_SEED) -> Path:
         "--summary-output": run_dir / "summary.xml",
         "--vehroute-output": run_dir / "vehroutes.xml",
     }
-    cmd = _base_sumo_cmd(seed, outputs)
+    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction)
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     (run_dir / "sumo_stdout.log").write_text(result.stdout)
@@ -114,7 +135,7 @@ def run_baseline(seed: int = DEFAULT_SEED) -> Path:
         "seed": seed,
         "begin_s": 0,
         "end_s": paths.SIM_END_S,
-        "rerouting_probability": 1.0,
+        "rerouting_probability": rerouting_fraction,
         "rerouting_period_s": 120,
         "time_to_teleport": -1,
         "closures": [],
@@ -131,6 +152,7 @@ def run_flooded(
     seed: int = DEFAULT_SEED,
     frame_index: int = FRAME_INDEX,
     closure_time_s: float = CLOSURE_TIME_S,
+    rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
 ) -> Path:
     """TraCI-controlled run: same net/demand/rerouting settings as the
     baseline, plus edges closed at ``closure_time_s`` per the one flood
@@ -146,7 +168,7 @@ def run_flooded(
         "--summary-output": run_dir / "summary.xml",
         "--vehroute-output": run_dir / "vehroutes.xml",
     }
-    cmd = _base_sumo_cmd(seed, outputs)
+    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction)
 
     closure_result = run_with_closures(cmd, closed, closure_time_s, float(paths.SIM_END_S))
 
@@ -163,7 +185,7 @@ def run_flooded(
         "seed": seed,
         "begin_s": 0,
         "end_s": paths.SIM_END_S,
-        "rerouting_probability": 1.0,
+        "rerouting_probability": rerouting_fraction,
         "rerouting_period_s": 120,
         "time_to_teleport": -1,
         "depth_scale_m": DEPTH_SCALE_M,
@@ -325,10 +347,16 @@ def run_flooded_multiframe(
     seed: int = DEFAULT_SEED,
     variant: str = flood_paths.DEFAULT_VARIANT,
     run_name: str = flood_paths.DEFAULT_RUN_NAME,
+    rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
 ) -> Path:
     """Slice 2: TraCI-controlled run with the full Pregnolato speed curve
     applied at all four 15-min marks (900/1800/2700/3600s), using a real
     ``flood_runner`` forecast (cached or freshly run) for ``scenario_name``.
+
+    ``rerouting_fraction`` (Slice 4, D5 sweep parameter): fraction of
+    vehicles carrying the rerouting device. Default preserves Slices 1-2's
+    behavior (100% -- see ``DEFAULT_REROUTING_FRACTION``); Slice 4's sweep
+    (``floodtwin.analysis.sweep``) calls this with 0.0/0.25/0.5/0.75/1.0.
     """
     run_dir = artifact.make_run_dir("flooded_multiframe")
     net = sumolib.net.readNet(str(paths.NET_FILE))
@@ -347,7 +375,7 @@ def run_flooded_multiframe(
         "--summary-output": run_dir / "summary.xml",
         "--vehroute-output": run_dir / "vehroutes.xml",
     }
-    cmd = _base_sumo_cmd(seed, outputs)
+    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction)
     apply_result = run_with_edge_states(cmd, edge_states_by_mark, float(paths.SIM_END_S))
 
     health = artifact.parse_run_health(outputs["--summary-output"])
@@ -380,7 +408,7 @@ def run_flooded_multiframe(
         "seed": seed,
         "begin_s": 0,
         "end_s": paths.SIM_END_S,
-        "rerouting_probability": 1.0,
+        "rerouting_probability": rerouting_fraction,
         "rerouting_period_s": 120,
         "time_to_teleport": -1,
         "depth_scale_m": DEPTH_SCALE_M,
@@ -431,6 +459,19 @@ def main():
     parser.add_argument("--variant", default=flood_paths.DEFAULT_VARIANT)
     parser.add_argument("--run-name", default=flood_paths.DEFAULT_RUN_NAME)
     parser.add_argument(
+        "--rerouting-fraction",
+        type=float,
+        default=DEFAULT_REROUTING_FRACTION,
+        help=(
+            "Slice 4 (D5): fraction (0.0-1.0) of vehicles carrying the SUMO "
+            "rerouting device (--device.rerouting.probability). Default "
+            f"{DEFAULT_REROUTING_FRACTION} preserves Slices 1-2 behavior. "
+            "Applied to BOTH the baseline and flooded run so they stay a "
+            "matched pair at this information level -- see "
+            "floodtwin.analysis.sweep for the multi-fraction/multi-seed sweep."
+        ),
+    )
+    parser.add_argument(
         "--metrics",
         action="store_true",
         help=(
@@ -442,13 +483,17 @@ def main():
     )
     args = parser.parse_args()
 
-    print("Running baseline (no closures)...")
-    baseline_dir = run_baseline(seed=args.seed)
+    print(f"Running baseline (no closures, rerouting_fraction={args.rerouting_fraction})...")
+    baseline_dir = run_baseline(seed=args.seed, rerouting_fraction=args.rerouting_fraction)
     print(f"  -> {baseline_dir}")
 
     print("\nRunning flooded (Pregnolato speeds/closures at 4x 15-min marks)...")
     flooded_dir = run_flooded_multiframe(
-        scenario_name=args.scenario, seed=args.seed, variant=args.variant, run_name=args.run_name
+        scenario_name=args.scenario,
+        seed=args.seed,
+        variant=args.variant,
+        run_name=args.run_name,
+        rerouting_fraction=args.rerouting_fraction,
     )
     print(f"  -> {flooded_dir}")
 
