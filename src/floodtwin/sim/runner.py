@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 import numpy as np
 
@@ -342,12 +342,28 @@ def print_demo_table(
             print(row)
 
 
+def validate_manual_closures(net, manual_closures: Optional[Iterable[str]]) -> List[str]:
+    """Slice 6: check requested manual-closure edge IDs actually exist in
+    ``net`` before spending any SUMO wall-clock time, and normalize to a
+    sorted list of unique IDs. Raises ``ValueError`` (caught by the API
+    layer and turned into a 400) naming every unrecognized edge ID at once,
+    not just the first."""
+    if not manual_closures:
+        return []
+    closures = sorted(set(manual_closures))
+    unknown = [eid for eid in closures if not net.hasEdge(eid)]
+    if unknown:
+        raise ValueError(f"unknown edge id(s) for manual closure: {unknown}")
+    return closures
+
+
 def run_flooded_multiframe(
     scenario_name: str = DEFAULT_SCENARIO_NAME,
     seed: int = DEFAULT_SEED,
     variant: str = flood_paths.DEFAULT_VARIANT,
     run_name: str = flood_paths.DEFAULT_RUN_NAME,
     rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
+    manual_closures: Optional[Iterable[str]] = None,
 ) -> Path:
     """Slice 2: TraCI-controlled run with the full Pregnolato speed curve
     applied at all four 15-min marks (900/1800/2700/3600s), using a real
@@ -357,9 +373,16 @@ def run_flooded_multiframe(
     vehicles carrying the rerouting device. Default preserves Slices 1-2's
     behavior (100% -- see ``DEFAULT_REROUTING_FRACTION``); Slice 4's sweep
     (``floodtwin.analysis.sweep``) calls this with 0.0/0.25/0.5/0.75/1.0.
+
+    ``manual_closures`` (Slice 6, PROJECT_PLAN.md Slice 6 "intervention"
+    feature): an optional list of edge IDs to force-closed for the whole
+    run, additive to (never a replacement for) the flood-derived
+    closures/speeds above -- see
+    ``floodtwin.sim.controller.run_with_edge_states``.
     """
     run_dir = artifact.make_run_dir("flooded_multiframe")
     net = sumolib.net.readNet(str(paths.NET_FILE))
+    manual_closures = validate_manual_closures(net, manual_closures)
 
     forecast_npz = get_or_build_forecast(scenario_name, variant=variant, run_name=run_name)
     depth_stack, transform, forecast_meta = load_forecast(forecast_npz)
@@ -367,6 +390,22 @@ def run_flooded_multiframe(
     edge_depths_by_mark, edge_states_by_mark, speed_limits_ms = compute_multiframe_edge_states(
         net, depth_stack, transform
     )
+    # Slice 6: the edge-state *table* (edge_states.csv -> the API's
+    # /edge_states endpoint -> the frontend's edge coloring) is written from
+    # edge_states_by_mark, which only carries the flood-derived
+    # speeds/closures computed above -- it knows nothing about
+    # manual_closures, which are applied straight to TraCI in
+    # run_with_edge_states and never flow back through this dict. Without
+    # this, a manually-closed edge would actually be impassable for the
+    # whole run (TraCI is authoritative) but the replay would still draw it
+    # open/slowed, which would make the "intervention" feature invisible in
+    # its own demo. Overlaying manual closures onto every mark here keeps
+    # the artifact's recorded state consistent with what TraCI actually did,
+    # without touching compute_multiframe_edge_states / the flood-closure
+    # logic itself.
+    for mark_states in edge_states_by_mark.values():
+        for edge_id in manual_closures:
+            mark_states[edge_id] = (0.0, True)
     artifact.write_multiframe_edge_state_table(run_dir, net, edge_depths_by_mark, edge_states_by_mark)
 
     outputs = {
@@ -376,7 +415,9 @@ def run_flooded_multiframe(
         "--vehroute-output": run_dir / "vehroutes.xml",
     }
     cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction)
-    apply_result = run_with_edge_states(cmd, edge_states_by_mark, float(paths.SIM_END_S))
+    apply_result = run_with_edge_states(
+        cmd, edge_states_by_mark, float(paths.SIM_END_S), manual_closures=manual_closures
+    )
 
     health = artifact.parse_run_health(outputs["--summary-output"])
     reroute = artifact.parse_reroute_stats(outputs["--tripinfo-output"])
@@ -415,6 +456,7 @@ def run_flooded_multiframe(
         "closure_threshold_mm": CLOSURE_THRESHOLD_MM,
         "frame_marks_s": list(FRAME_MARKS_S),
         "frame_labels": list(FRAME_LABELS),
+        "manual_closures": manual_closures,
         "per_frame_summary": per_frame_summary,
         "apply_result": apply_result,
         "run_health": health,
@@ -472,6 +514,15 @@ def main():
         ),
     )
     parser.add_argument(
+        "--manual-closures",
+        default="",
+        help=(
+            "Slice 6: comma-separated list of edge IDs to force-close for the "
+            "whole run, additive to the flood-derived closures (e.g. "
+            "'-104538864,-104538864#1')."
+        ),
+    )
+    parser.add_argument(
         "--metrics",
         action="store_true",
         help=(
@@ -487,6 +538,7 @@ def main():
     baseline_dir = run_baseline(seed=args.seed, rerouting_fraction=args.rerouting_fraction)
     print(f"  -> {baseline_dir}")
 
+    manual_closures = [c.strip() for c in args.manual_closures.split(",") if c.strip()]
     print("\nRunning flooded (Pregnolato speeds/closures at 4x 15-min marks)...")
     flooded_dir = run_flooded_multiframe(
         scenario_name=args.scenario,
@@ -494,6 +546,7 @@ def main():
         variant=args.variant,
         run_name=args.run_name,
         rerouting_fraction=args.rerouting_fraction,
+        manual_closures=manual_closures,
     )
     print(f"  -> {flooded_dir}")
 

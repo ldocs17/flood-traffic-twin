@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Dict, List
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -35,6 +36,26 @@ def cached_forecast_path(scenario_stem: str, run_name: str = DEFAULT_RUN_NAME) -
     (``data/scenarios/<scenario>_<run_name>_forecast.npz``) so repeated CLI
     invocations for the same scenario/checkpoint don't re-run TF inference."""
     return SCENARIOS_DIR / f"{scenario_stem}_{run_name}_forecast.npz"
+
+
+def list_available_scenarios(run_name: str = DEFAULT_RUN_NAME) -> List[Dict[str, object]]:
+    """Slice 6: storm scenario names the browser's scenario form can offer,
+    scanned from the Example Dataset's ``input/`` folder (every scenario
+    that has a valid model *input* frame, IMPLEMENTATION_CONTEXT.md #2 --
+    300 across the two storm events). Each entry also reports whether a
+    ``flood_runner`` forecast is already cached for ``run_name`` (an
+    instant run vs. a ~30s inference cold start, IMPLEMENTATION_CONTEXT.md
+    G2 / PROGRESS.md's Slice 2 note) so the frontend can hint at it.
+
+    Pure ``pathlib`` glob -- no TensorFlow import, safe to call from the
+    API's usual (SUMO-capable, TF-less) Python 3.8 process."""
+    if not EXAMPLE_INPUT_DIR.is_dir():
+        return []
+    result = []
+    for p in sorted(EXAMPLE_INPUT_DIR.glob("*.npy")):
+        stem = p.stem
+        result.append({"name": stem, "cached": cached_forecast_path(stem, run_name).exists()})
+    return result
 
 
 # Slice 2 deviation (documented in the report): the repo's usual Python 3.8
