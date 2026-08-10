@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "floodtwin"
+version = "0.1.0"
+description = "Flood-traffic digital twin: CNN-LSTM flood forecasts coupled with SUMO microsimulation for a Norfolk, VA district."
+requires-python = ">=3.8"
+dependencies = [
+    "numpy>=1.24,<2",
+    "pandas>=2.0,<3",
+    "folium>=0.18,<0.19",
+]
+
+[project.optional-dependencies]
+# Slice 2+ (flood_runner CLI, model inference). NOT installable/importable
+# under this repo's usual Python 3.8 interpreter: `flood_pipeline.py` (the
+# canonical model code, IMPLEMENTATION_CONTEXT.md G2) requires `keras.ops`,
+# which only exists in Keras 3+ -- the Python 3.8 env has TF 2.13 / Keras
+# 2.13 (pre-Keras-3). Verified working combo: TF 2.21.0 / Keras 3.15.0 under
+# a Python 3.13 interpreter (see src/floodtwin/flood/paths.py DEFAULT_TF_PYTHON
+# and scripts/verify_weights_load.py). Run `flood_runner` with that
+# interpreter; nothing else in this repo imports TensorFlow.
+flood = ["tensorflow>=2.16"]
+# Slice 5+ (web replay).
+api = ["fastapi", "uvicorn"]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+# NOTE on SUMO tooling: `sumolib` and `traci` are NOT pip packages in this
+# environment (Python 3.8.3, no PyPI sumolib install found). They ship inside
+# the SUMO installation at `%SUMO_HOME%\tools` (SUMO_HOME =
+# "C:\Program Files (x86)\Eclipse\Sumo" here). Code that needs them must call
+# `floodtwin.sumo_env.ensure_sumo_tools_on_path()` before importing them --
+# see src/floodtwin/sumo_env.py. Do not add "sumolib"/"traci" to
+# `dependencies` above; pip cannot install them.
