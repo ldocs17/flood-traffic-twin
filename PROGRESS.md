@@ -8,7 +8,7 @@ slice per loop iteration; the orchestrator verifies before checking it off here.
 |---|-------|----------|--------|
 | 1 | Walking skeleton — vehicles detour around the flooded block | SG1 | **done** |
 | 2 | Real forecasts, real curve — full 60-minute coupling | SG1 | **done** |
-| 3 | Baseline comparison and first research figure | SG2 | pending |
+| 3 | Baseline comparison and first research figure | SG2 | **done** |
 | 4 | Information sweep — the headline result | SG2 | pending |
 | 5 | Web replay of a completed run | SG3 | pending |
 | 6 | Run from the browser | SG3 | pending |
@@ -27,6 +27,14 @@ from this loop.
   compile-check of all sources. Full pipeline runs (SUMO/TraCI/model inference) depend
   on local sibling-repo paths and a SUMO install, so they are intentionally out of CI's
   scope — see README.md.
+
+## Workflow (as of Slice 3)
+
+Subagents now implement each slice on a feature branch (`slice-N-<short-name>`) and
+open a PR against `main` (`gh pr create`) rather than committing directly. The
+orchestrator fetches the branch, re-runs tests and the full pipeline independently,
+reads the diff, posts a verification comment, then squash-merges and updates this file
+on `main`. `PROGRESS.md` is still orchestrator-owned — subagents never edit it.
 
 ## Notes log
 
@@ -63,3 +71,25 @@ from this loop.
   reproduced the exact per-frame closed/slowed table (29/40, 30/37, 29/42, 29/40) and
   health (0 teleports, 0 collisions, 1335 arrived) reported by the subagent. 28/28
   tests pass (14 new).
+
+- **2026-08-10, GitHub + CI set up.** Public repo at
+  [ldocs17/flood-traffic-twin](https://github.com/ldocs17/flood-traffic-twin), Slices
+  1-2 pushed as the initial commit on `main`. Added `.github/workflows/ci.yml` (pure
+  unit tests on py3.8/py3.11 + a compile-check — no SUMO/TF needed, confirmed by
+  running tests with `SUMO_HOME` unset) and a root `README.md`. First CI run green.
+
+- **2026-08-10, Slice 3 done — first PR-based slice.** Workflow changed per user
+  request: subagents now branch + PR instead of committing to the working tree
+  directly (see "Workflow" above). Subagent built `src/floodtwin/analysis/metrics.py`
+  (travel-time delta, exposure, throughput, closure timeline — all pure/testable) on
+  `slice-3-baseline-metrics`, opened
+  [PR #1](https://github.com/ldocs17/flood-traffic-twin/pull/1). Verified
+  independently before merging: checked out the branch, ran `pytest` (45/45 pass),
+  read the full diff (scoped exactly to the described files, no incidental changes),
+  read `metrics.py` end to end, and — most importantly — reran the entire pipeline
+  fresh (`runner.py --seed 42 --scenario Sep_30_2022_74.75 --metrics`, a brand new
+  sim run, not reusing cached output) and got numbers matching the PR's claims exactly
+  (mean travel time 169.9s→195.1s, p95 289.0s→353.0s, throughput 1398→1335, exposure
+  99/1335 closed-edge / 286/1335 wet-edge, 0 teleports/collisions both runs). Opened
+  the generated PNG and visually confirmed the right-shifted, longer-tailed flooded
+  distribution. Squash-merged via `gh pr merge --squash --delete-branch`.
