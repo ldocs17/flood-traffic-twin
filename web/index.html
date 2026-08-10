@@ -17,85 +17,213 @@
     color: #e6e6ec;
   }
   #app { display: flex; height: 100%; }
-  #map { flex: 1 1 auto; min-width: 0; }
-  #sidebar {
-    width: 320px; flex: 0 0 320px; overflow-y: auto;
-    background: #1a1a2e; border-right: 1px solid #333;
-    padding: 16px; box-sizing: border-box;
+  .panel {
+    flex: 1 1 50%; min-width: 0;
+    display: flex; flex-direction: column;
+    border-right: 1px solid #333;
   }
-  #sidebar h1 { font-size: 16px; margin: 0 0 4px; }
-  #sidebar .subtitle { font-size: 11px; color: #999; margin-bottom: 16px; }
-  #sidebar label { display: block; font-size: 12px; color: #aaa; margin: 14px 0 4px; }
-  #sidebar select, #sidebar input[type=range] { width: 100%; box-sizing: border-box; }
-  select {
+  .panel:last-child { border-right: none; }
+  .panel-main { flex: 1 1 auto; display: flex; min-height: 0; }
+  .map { flex: 1 1 auto; min-width: 0; }
+  .sidebar {
+    width: 300px; flex: 0 0 300px; overflow-y: auto;
+    background: #1a1a2e; border-right: 1px solid #333;
+    padding: 14px; box-sizing: border-box;
+  }
+  .sidebar h1 { font-size: 15px; margin: 0 0 2px; }
+  .sidebar .subtitle { font-size: 11px; color: #999; margin-bottom: 12px; }
+  .sidebar h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    color: #8aa; margin: 18px 0 8px; border-top: 1px solid #2c2c40; padding-top: 14px;
+  }
+  .sidebar h2:first-of-type { border-top: none; padding-top: 0; }
+  .sidebar label { display: block; font-size: 12px; color: #aaa; margin: 10px 0 4px; }
+  .sidebar select, .sidebar input[type=range], .sidebar input[type=number] {
+    width: 100%; box-sizing: border-box;
+  }
+  select, input[type=number] {
     background: #2a2a40; color: #e6e6ec; border: 1px solid #444;
     border-radius: 4px; padding: 6px; font-size: 13px;
   }
-  #runInfo { font-size: 12px; line-height: 1.6; margin-top: 10px; }
-  #runInfo .row { display: flex; justify-content: space-between; }
-  #runInfo .row span:first-child { color: #999; }
-  #runInfo .warn { color: #f39c12; }
-  #runInfo .bad { color: #e74c3c; }
-  #runInfo .ok { color: #2ecc71; }
-  .legend { font-size: 12px; margin-top: 16px; }
+  .btn {
+    background: #2a2a40; color: #e6e6ec; border: 1px solid #444;
+    border-radius: 4px; padding: 7px 10px; font-size: 12px; cursor: pointer;
+    width: 100%; margin-top: 6px;
+  }
+  .btn:hover { background: #33334a; }
+  .btn:disabled { opacity: 0.5; cursor: default; }
+  .btn.primary { background: #2ecc71; color: #10231a; border-color: #2ecc71; font-weight: 600; }
+  .btn.primary:hover { background: #37d67f; }
+  .btn.active { background: #d35400; border-color: #d35400; color: #fff; }
+  .closure-list { font-size: 11px; margin-top: 6px; min-height: 16px; }
+  .closure-chip {
+    display: inline-block; background: #3a1a3a; color: #ff8fe8; border: 1px solid #6b2f6b;
+    border-radius: 10px; padding: 2px 8px; margin: 2px 4px 0 0; cursor: pointer;
+  }
+  .closure-chip:hover { background: #55265a; }
+  .row-inline { display: flex; gap: 8px; }
+  .row-inline > * { flex: 1 1 0; }
+  #runInfo-a, #runInfo-b, .run-info { font-size: 12px; line-height: 1.6; margin-top: 8px; }
+  .run-info .row { display: flex; justify-content: space-between; }
+  .run-info .row span:first-child { color: #999; }
+  .run-info .warn { color: #f39c12; }
+  .run-info .bad { color: #e74c3c; }
+  .run-info .ok { color: #2ecc71; }
+  .legend { font-size: 12px; margin-top: 14px; }
   .legend .item { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
   .swatch { width: 14px; height: 14px; border-radius: 3px; flex: 0 0 14px; }
-  #status { font-size: 11px; color: #777; margin-top: 20px; white-space: pre-wrap; }
-  #controls {
-    position: absolute; left: 336px; right: 12px; bottom: 12px;
-    background: rgba(20,20,31,0.92); border: 1px solid #333; border-radius: 8px;
-    padding: 10px 16px; display: flex; align-items: center; gap: 12px;
-    font-size: 12px; z-index: 5;
+  .status { font-size: 11px; color: #777; margin-top: 16px; white-space: pre-wrap; }
+  .job-status { font-size: 11px; margin-top: 8px; min-height: 14px; }
+  .job-status.running { color: #f39c12; }
+  .job-status.done { color: #2ecc71; }
+  .job-status.error { color: #e74c3c; white-space: pre-wrap; }
+  .controls {
+    flex: 0 0 auto; display: flex; align-items: center; gap: 10px;
+    background: #1a1a2e; border-top: 1px solid #333;
+    padding: 8px 14px; font-size: 12px;
   }
-  #playBtn {
+  .playBtn {
     background: #2ecc71; color: #111; border: none; border-radius: 50%;
-    width: 32px; height: 32px; font-size: 14px; cursor: pointer; flex: 0 0 32px;
+    width: 28px; height: 28px; font-size: 13px; cursor: pointer; flex: 0 0 28px;
   }
-  #timeSlider { flex: 1 1 auto; }
-  #timeLabel { width: 150px; text-align: right; flex: 0 0 150px; font-variant-numeric: tabular-nums; }
-  #speedSelect { flex: 0 0 auto; }
-  .loading { padding: 40px; text-align: center; color: #888; }
+  .timeSlider { flex: 1 1 auto; }
+  .timeLabel { width: 130px; text-align: right; flex: 0 0 130px; font-variant-numeric: tabular-nums; }
+  .speedSelect { flex: 0 0 auto; }
+  .hint { font-size: 10.5px; color: #777; margin-top: 4px; line-height: 1.4; }
 </style>
 </head>
 <body>
 <div id="app">
-  <div id="sidebar">
-    <h1>Flood-Traffic Digital Twin</h1>
-    <div class="subtitle">Slice 5 — replay of a completed run</div>
+  <div class="panel" id="panelA">
+    <div class="panel-main">
+      <div class="sidebar">
+        <h1>Flood-Traffic Digital Twin</h1>
+        <div class="subtitle">Panel A — configure/run or replay</div>
 
-    <label for="runSelect">Run</label>
-    <select id="runSelect"><option>Loading runs...</option></select>
+        <h2>Configure &amp; run a scenario</h2>
+        <label>Storm scenario</label>
+        <select class="scenarioSelect"><option>Loading scenarios...</option></select>
 
-    <div id="runInfo"></div>
+        <label>Rerouting information level (<span class="reroutingVal">50%</span>)</label>
+        <input class="reroutingInput" type="range" min="0" max="100" value="50">
 
-    <label for="opacitySlider">Flood raster opacity (<span id="opacityVal">70%</span>)</label>
-    <input id="opacitySlider" type="range" min="0" max="100" value="70">
+        <div class="row-inline">
+          <div>
+            <label>Seed</label>
+            <input class="seedInput" type="number" value="42" step="1">
+          </div>
+        </div>
 
-    <div class="legend">
-      <b>Edges</b>
-      <div class="item"><div class="swatch" style="background:#2ecc71"></div>open</div>
-      <div class="item"><div class="swatch" style="background:#f39c12"></div>slowed</div>
-      <div class="item"><div class="swatch" style="background:#e74c3c"></div>closed</div>
-      <b style="display:block; margin-top:10px;">Flood depth</b>
-      <div class="item"><div class="swatch" style="background:rgba(30,150,255,0.5)"></div>shallow</div>
-      <div class="item"><div class="swatch" style="background:rgba(0,60,220,0.85)"></div>deep</div>
-      <b style="display:block; margin-top:10px;">Vehicles</b>
-      <div class="item"><div class="swatch" style="background:#00b7ff; border-radius:50%"></div>moving</div>
+        <label>Manual edge closures (the "intervention")</label>
+        <button class="btn closureModeBtn">Click map edges to close them</button>
+        <div class="closure-list"><span class="closureEmpty" style="color:#666;">none selected</span></div>
+        <div class="hint">Toggle the button, then click road segments on the map to force-close them for the whole run (in addition to any flood-driven closures). Click a listed chip to remove it.</div>
+
+        <button class="btn primary runBtn">Run scenario</button>
+        <div class="job-status"></div>
+
+        <h2>Or load a completed run</h2>
+        <select class="runSelect"><option>Loading runs...</option></select>
+
+        <div class="run-info"></div>
+
+        <label>Flood raster opacity (<span class="opacityVal">70%</span>)</label>
+        <input class="opacitySlider" type="range" min="0" max="100" value="70">
+
+        <div class="legend">
+          <b>Edges</b>
+          <div class="item"><div class="swatch" style="background:#2ecc71"></div>open</div>
+          <div class="item"><div class="swatch" style="background:#f39c12"></div>slowed</div>
+          <div class="item"><div class="swatch" style="background:#e74c3c"></div>closed</div>
+          <div class="item"><div class="swatch" style="background:#ff00ff"></div>manually closed (pending)</div>
+          <b style="display:block; margin-top:10px;">Flood depth</b>
+          <div class="item"><div class="swatch" style="background:rgba(30,150,255,0.5)"></div>shallow</div>
+          <div class="item"><div class="swatch" style="background:rgba(0,60,220,0.85)"></div>deep</div>
+          <b style="display:block; margin-top:10px;">Vehicles</b>
+          <div class="item"><div class="swatch" style="background:#00b7ff; border-radius:50%"></div>moving</div>
+        </div>
+
+        <div class="status"></div>
+      </div>
+      <div class="map"></div>
     </div>
-
-    <div id="status"></div>
+    <div class="controls">
+      <button class="playBtn" title="Play/Pause">&#9654;</button>
+      <input class="timeSlider" type="range" min="0" max="3700" value="0" step="1">
+      <div class="timeLabel">t = 0s</div>
+      <select class="speedSelect">
+        <option value="1">1x</option>
+        <option value="4" selected>4x</option>
+        <option value="16">16x</option>
+        <option value="60">60x</option>
+      </select>
+    </div>
   </div>
-  <div id="map"></div>
-  <div id="controls">
-    <button id="playBtn" title="Play/Pause">&#9654;</button>
-    <input id="timeSlider" type="range" min="0" max="3700" value="0" step="1">
-    <div id="timeLabel">t = 0s</div>
-    <select id="speedSelect">
-      <option value="1">1x</option>
-      <option value="4" selected>4x</option>
-      <option value="16">16x</option>
-      <option value="60">60x</option>
-    </select>
+
+  <div class="panel" id="panelB">
+    <div class="panel-main">
+      <div class="sidebar">
+        <h1>Flood-Traffic Digital Twin</h1>
+        <div class="subtitle">Panel B — configure/run or replay</div>
+
+        <h2>Configure &amp; run a scenario</h2>
+        <label>Storm scenario</label>
+        <select class="scenarioSelect"><option>Loading scenarios...</option></select>
+
+        <label>Rerouting information level (<span class="reroutingVal">50%</span>)</label>
+        <input class="reroutingInput" type="range" min="0" max="100" value="50">
+
+        <div class="row-inline">
+          <div>
+            <label>Seed</label>
+            <input class="seedInput" type="number" value="42" step="1">
+          </div>
+        </div>
+
+        <label>Manual edge closures (the "intervention")</label>
+        <button class="btn closureModeBtn">Click map edges to close them</button>
+        <div class="closure-list"><span class="closureEmpty" style="color:#666;">none selected</span></div>
+        <div class="hint">Toggle the button, then click road segments on the map to force-close them for the whole run (in addition to any flood-driven closures). Click a listed chip to remove it.</div>
+
+        <button class="btn primary runBtn">Run scenario</button>
+        <div class="job-status"></div>
+
+        <h2>Or load a completed run</h2>
+        <select class="runSelect"><option>Loading runs...</option></select>
+
+        <div class="run-info"></div>
+
+        <label>Flood raster opacity (<span class="opacityVal">70%</span>)</label>
+        <input class="opacitySlider" type="range" min="0" max="100" value="70">
+
+        <div class="legend">
+          <b>Edges</b>
+          <div class="item"><div class="swatch" style="background:#2ecc71"></div>open</div>
+          <div class="item"><div class="swatch" style="background:#f39c12"></div>slowed</div>
+          <div class="item"><div class="swatch" style="background:#e74c3c"></div>closed</div>
+          <div class="item"><div class="swatch" style="background:#ff00ff"></div>manually closed (pending)</div>
+          <b style="display:block; margin-top:10px;">Flood depth</b>
+          <div class="item"><div class="swatch" style="background:rgba(30,150,255,0.5)"></div>shallow</div>
+          <div class="item"><div class="swatch" style="background:rgba(0,60,220,0.85)"></div>deep</div>
+          <b style="display:block; margin-top:10px;">Vehicles</b>
+          <div class="item"><div class="swatch" style="background:#00b7ff; border-radius:50%"></div>moving</div>
+        </div>
+
+        <div class="status"></div>
+      </div>
+      <div class="map"></div>
+    </div>
+    <div class="controls">
+      <button class="playBtn" title="Play/Pause">&#9654;</button>
+      <input class="timeSlider" type="range" min="0" max="3700" value="0" step="1">
+      <div class="timeLabel">t = 0s</div>
+      <select class="speedSelect">
+        <option value="1">1x</option>
+        <option value="4" selected>4x</option>
+        <option value="16">16x</option>
+        <option value="60">60x</option>
+      </select>
+    </div>
   </div>
 </div>
 <script src="app.js"></script>

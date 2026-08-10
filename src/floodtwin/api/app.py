@@ -12,15 +12,19 @@ extra installed):
 
 Then open http://localhost:8000/ .
 
-Scope (Slice 5 only, per PROJECT_PLAN.md): replay of *already-completed*
-runs. No "run from the browser" (POST-to-run) -- that's Slice 6.
+Slice 5 scope was replay of *already-completed* runs only. Slice 6 (below)
+adds ``POST /api/runs``: submit a scenario config (storm, rerouting
+fraction, seed, optional manual edge closures) from the browser and it
+triggers a real SUMO+flood-coupling pipeline run in the background, polled
+via ``GET /api/run_jobs/{job_id}`` until a run artifact exists to replay.
 """
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -28,8 +32,12 @@ from floodtwin.api import edge_states as edge_states_mod
 from floodtwin.api import fcd as fcd_mod
 from floodtwin.api import flood_raster
 from floodtwin.api import network as network_mod
+from floodtwin.api import run_jobs
 from floodtwin.api import runs as runs_mod
+from floodtwin.api.run_request import InvalidRunRequestError, RunRequest, parse_run_request
+from floodtwin.flood import paths as flood_paths
 from floodtwin.sim import paths as sim_paths
+from floodtwin.sim import runner as runner_mod
 
 REPO_ROOT = sim_paths.REPO_ROOT
 RUNS_DIR = sim_paths.RUNS_DIR
@@ -141,6 +149,79 @@ def api_run_flood_png(run_id: str, frame_index: int):
     rgba = flood_raster.frame_rgba(source.depth_stack, frame_index, global_max=global_max)
     png_bytes = flood_raster.rgba_to_png_bytes(rgba)
     return Response(content=png_bytes, media_type="image/png")
+
+
+# ---------------------------------------------------------------------------
+# Slice 6: "Run from the browser" -- POST a scenario config, poll for
+# completion, then replay it with the same endpoints as any other run above.
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/scenarios")
+def api_scenarios():
+    """Storm scenarios available for the browser's scenario form (Slice 6),
+    with a ``cached`` flag so the frontend can hint whether picking one
+    means an instant run or a ~30s flood-model cold start."""
+    return {"scenarios": flood_paths.list_available_scenarios()}
+
+
+def _execute_run_job(job_id: str, req: RunRequest, manual_closures: list) -> None:
+    run_jobs.run_job(
+        job_id,
+        lambda: runner_mod.run_flooded_multiframe(
+            scenario_name=req.storm_scenario,
+            seed=req.seed,
+            rerouting_fraction=req.rerouting_probability,
+            manual_closures=manual_closures,
+        ),
+    )
+
+
+@app.post("/api/runs")
+def api_create_run(body: dict, background_tasks: BackgroundTasks):
+    """Slice 6: trigger a full flooded-multiframe pipeline run
+    (``floodtwin.sim.runner.run_flooded_multiframe`` -- the same
+    orchestration the CLI uses, not a duplicate) from a browser-submitted
+    scenario config. Returns immediately with a ``job_id`` to poll at
+    ``GET /api/run_jobs/{job_id}`` -- see ``floodtwin.api.run_jobs`` for why
+    this is a background task rather than a blocking request.
+
+    Cheap validation happens synchronously, before any job is created, so
+    the client gets an immediate 400 instead of a job that's doomed to fail
+    30s later: the body shape (``floodtwin.api.run_request``), manual-closure
+    edge IDs against the real net, and the storm scenario name against the
+    scenarios actually on disk (when that list is available at all).
+    """
+    try:
+        req = parse_run_request(body)
+    except InvalidRunRequestError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    net = network_mod.load_net(sim_paths.NET_FILE)
+    try:
+        manual_closures = runner_mod.validate_manual_closures(net, req.manual_closures)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    available = flood_paths.list_available_scenarios()
+    available_names = {s["name"] for s in available}
+    if available_names and req.storm_scenario not in available_names:
+        raise HTTPException(
+            status_code=400,
+            detail=f"unknown storm scenario {req.storm_scenario!r} (see GET /api/scenarios)",
+        )
+
+    job_id = run_jobs.create_job(dataclasses.asdict(req))
+    background_tasks.add_task(_execute_run_job, job_id, req, manual_closures)
+    return {"job_id": job_id, "status": "running"}
+
+
+@app.get("/api/run_jobs/{job_id}")
+def api_run_job_status(job_id: str):
+    job = run_jobs.get_job(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail=f"no job {job_id!r}")
+    return job
 
 
 # Static frontend (web/) -- mounted last so it acts as a catch-all and

@@ -8,7 +8,7 @@ Slice 1 applied exactly one frame's closures at t=15min / 900s
 """
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Iterable, List, Optional, Set, Tuple
 
 from floodtwin.sumo_env import ensure_sumo_tools_on_path
 
@@ -57,6 +57,7 @@ def run_with_edge_states(
     sumo_cmd: List[str],
     edge_states_by_mark: Dict[float, Dict[str, Tuple[float, bool]]],
     end_time_s: float,
+    manual_closures: Optional[Iterable[str]] = None,
 ) -> dict:
     """Start SUMO under TraCI using ``sumo_cmd``, step the simulation forward
     to ``end_time_s``, applying ``edge_states_by_mark[mark]`` (each value a
@@ -76,12 +77,27 @@ def run_with_edge_states(
     congestion). This is exactly what SUMO does by default when an edge
     becomes disallowed mid-route with ``--time-to-teleport -1`` (teleporting
     disabled); nothing in this function forces vehicles off a closed edge.
+
+    ``manual_closures`` (Slice 6, PROJECT_PLAN.md Slice 6 "intervention"
+    feature): an additional, explicit set of edge IDs to force-closed for
+    the *entire* run, independent of the flood-driven per-mark schedule
+    above. Applied once immediately (t=0, before the first simulation step)
+    and then never reopened/overridden by a later mark's flood-driven state
+    -- these represent a human decision (e.g. "close this bridge"), not
+    something the flood model should be able to walk back. Keeping this as
+    a thin addition on top of the existing per-mark loop (rather than
+    threading it through :mod:`floodtwin.coupling.edge_mapper`) keeps the
+    flood-closure logic itself untouched.
     """
+    manual_closures = set(manual_closures or ())
     traci.start(sumo_cmd)
     marks = sorted(edge_states_by_mark.keys())
     applied_marks: List[float] = []
     currently_closed: Set[str] = set()
     try:
+        for edge_id in manual_closures:
+            traci.edge.setDisallowed(edge_id, ["all"])
+            currently_closed.add(edge_id)
         idx = 0
         while True:
             t = traci.simulation.getTime()
@@ -91,6 +107,11 @@ def run_with_edge_states(
                 mark = marks[idx]
                 state = edge_states_by_mark[mark]
                 for edge_id, (v_max_ms, closed) in state.items():
+                    if edge_id in manual_closures:
+                        # Manual closures are a standing override -- never
+                        # reopened or given a flood-driven max speed by the
+                        # per-mark schedule.
+                        continue
                     if closed:
                         traci.edge.setDisallowed(edge_id, ["all"])
                         currently_closed.add(edge_id)
@@ -109,4 +130,5 @@ def run_with_edge_states(
     return {
         "marks_applied_s": applied_marks,
         "n_marks_applied": len(applied_marks),
+        "manual_closures_applied": sorted(manual_closures),
     }
