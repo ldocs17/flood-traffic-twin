@@ -23,8 +23,13 @@ dependencies = [
 # and scripts/verify_weights_load.py). Run `flood_runner` with that
 # interpreter; nothing else in this repo imports TensorFlow.
 flood = ["tensorflow>=2.16"]
-# Slice 5+ (web replay).
-api = ["fastapi", "uvicorn"]
+# Slice 5+ (web replay). fastapi/uvicorn serve the API; pillow renders the
+# flood-raster PNG overlay (floodtwin.api.flood_raster). Run uvicorn with
+# the same interpreter that has sumolib reachable (this repo's usual
+# Python 3.8 env via SUMO_HOME/tools -- see floodtwin.sumo_env) since
+# floodtwin.api.network parses the net file; nothing in this extra needs
+# TensorFlow.
+api = ["fastapi>=0.100,<1", "uvicorn[standard]>=0.23,<1", "pillow>=10,<11"]
 # Slice 3+ (floodtwin.analysis.metrics figures). Kept optional/lazy-imported
 # (see sim/runner.py's --metrics flag) so plain simulation runs never need it.
 analysis = ["matplotlib>=3.5"]
