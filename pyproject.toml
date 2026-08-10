@@ -25,7 +25,10 @@ dependencies = [
 flood = ["tensorflow>=2.16"]
 # Slice 5+ (web replay).
 api = ["fastapi", "uvicorn"]
-test = ["pytest"]
+# Slice 3+ (floodtwin.analysis.metrics figures). Kept optional/lazy-imported
+# (see sim/runner.py's --metrics flag) so plain simulation runs never need it.
+analysis = ["matplotlib>=3.5"]
+test = ["pytest", "matplotlib>=3.5"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

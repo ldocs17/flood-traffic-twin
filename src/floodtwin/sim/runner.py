@@ -430,6 +430,16 @@ def main():
     )
     parser.add_argument("--variant", default=flood_paths.DEFAULT_VARIANT)
     parser.add_argument("--run-name", default=flood_paths.DEFAULT_RUN_NAME)
+    parser.add_argument(
+        "--metrics",
+        action="store_true",
+        help=(
+            "Slice 3: after producing the baseline/flooded run pair, compute "
+            "travel-time/exposure/throughput/closure-timeline metrics and write "
+            "metrics.json + trip_metrics.csv + a travel-time-distribution figure "
+            "into a new runs/<ts>_metrics_<scenario>/ dir (see floodtwin.analysis.metrics)."
+        ),
+    )
     args = parser.parse_args()
 
     print("Running baseline (no closures)...")
@@ -441,6 +451,16 @@ def main():
         scenario_name=args.scenario, seed=args.seed, variant=args.variant, run_name=args.run_name
     )
     print(f"  -> {flooded_dir}")
+
+    if args.metrics:
+        # Lazy import: metrics.py pulls in matplotlib (an "analysis"/"test"
+        # extra, not a core dependency), and nothing else in this module
+        # should require it just to run a simulation.
+        from floodtwin.analysis.metrics import compute_and_write
+
+        print("\nComputing Slice 3 metrics (travel time / exposure / throughput / closure timeline)...")
+        metrics_dir = compute_and_write(baseline_dir, flooded_dir)
+        print(f"  -> {metrics_dir}")
 
 
 if __name__ == "__main__":
