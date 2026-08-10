@@ -18,6 +18,16 @@ slice per loop iteration; the orchestrator verifies before checking it off here.
 SG5 (live-data upgrade path) is explicitly flagged-not-scheduled in the plan — excluded
 from this loop.
 
+## Infrastructure
+
+- **GitHub**: [ldocs17/flood-traffic-twin](https://github.com/ldocs17/flood-traffic-twin)
+  (public), default branch `main`.
+- **CI**: `.github/workflows/ci.yml` runs on every push/PR to `main` — pure unit tests
+  (`tests/test_coupling.py`, no SUMO/TF needed) on Python 3.8 and 3.11, plus a
+  compile-check of all sources. Full pipeline runs (SUMO/TraCI/model inference) depend
+  on local sibling-repo paths and a SUMO install, so they are intentionally out of CI's
+  scope — see README.md.
+
 ## Notes log
 
 (Orchestrator appends one short entry per loop iteration below, newest last.)
