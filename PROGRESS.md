@@ -11,7 +11,7 @@ slice per loop iteration; the orchestrator verifies before checking it off here.
 | 3 | Baseline comparison and first research figure | SG2 | **done** |
 | 4 | Information sweep — the headline result | SG2 | **done** |
 | 5 | Web replay of a completed run | SG3 | **done** |
-| 6 | Run from the browser | SG3 | pending |
+| 6 | Run from the browser | SG3 | **done** |
 | 7 | Calibrated demand | SG4 | pending |
 | 8 | Sensitivity and robustness | SG4 | pending |
 
@@ -132,3 +132,31 @@ on `main`. `PROGRESS.md` is still orchestrator-owned — subagents never edit it
   in the live console, which worked correctly. **Recommend a manual spot-check in a
   normal desktop browser** before relying on this for the paper demo — neither agent
   could get a real pixel screenshot of the rendered map in this environment.
+
+- **2026-08-10, Slice 6 done -- run from the browser.** `POST /api/runs` (validates
+  storm/rerouting/seed/manual-closures, schedules `runner.run_flooded_multiframe` -- the
+  same orchestration the CLI uses -- as a FastAPI `BackgroundTasks` job) + `GET
+  /api/run_jobs/{id}` polling + `GET /api/scenarios`. New "intervention" feature: manual
+  edge closures, force-closed at t=0 via `controller.run_with_edge_states` and never
+  reopened by the flood-driven per-mark schedule -- additive to, not a replacement for,
+  flood-derived closures -- and overlaid onto the written edge-state table so replay
+  coloring matches what TraCI actually enforced. Frontend refactored Slice 5's replay UI
+  into a `createPanel()` factory instantiated twice (`panelA`/`panelB`) for genuine
+  side-by-side comparison, plus a scenario form and click-to-toggle manual closures on
+  the map. [Issue #4](https://github.com/ldocs17/flood-traffic-twin/issues/4),
+  [PR #5](https://github.com/ldocs17/flood-traffic-twin/pull/5). 113/113 tests pass (29
+  new). Verified independently: checked out the branch into a **separate** worktree and
+  repointed the editable install at it (so verification wasn't silently exercising the
+  implementing agent's own working copy), reran the full suite, read the full diff, then
+  started the real API server and drove `POST /api/runs` end-to-end against real SUMO --
+  submitted a real scenario, polled to completion (~22s), and specifically proved the
+  closure is genuinely additive (not just flood-derived) by force-closing an edge with
+  `depth_m: 0.0` that was open in a plain run and confirming `closed: true` at all 4
+  marks with the run still healthy (0 teleports/collisions). Exercised all five
+  validation error paths (bad edge id, bad scenario, out-of-range rerouting probability,
+  missing scenario, unknown job id) directly via curl -- all matched the code. Read
+  `web/app.js`/`index.html` end to end; selectors and panel wiring check out. Same known
+  environment limitation as Slice 5 (browser pane can't composite MapLibre canvases for
+  screenshots) -- the implementing agent worked around it by driving the real UI
+  (button clicks, a real MapLibre map click event) rather than faking evidence; worth a
+  manual desktop-browser spot-check before the paper demo, same as Slice 5.
