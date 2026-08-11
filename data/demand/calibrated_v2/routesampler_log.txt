@@ -1,0 +1,24 @@
+Running HiGHS 1.2.0 [date: 2021-07-09, git hash: n/a]
+Copyright (c) 2022 ERGO-Code under MIT licence terms
+Presolving model
+47 rows, 3793 cols, 20016 nonzeros
+47 rows, 547 cols, 3807 nonzeros
+47 rows, 547 cols, 3807 nonzeros
+Presolve : Reductions: rows 47(-0); columns 547(-3773); elements 3807(-16736)
+Solving the presolved LP
+Using EKK dual simplex solver - serial
+  Iteration        Objective     Infeasibilities num(sum)
+          0     0.0000000000e+00 Pr: 47(61018) 0s
+         40     3.8063333333e+03 Pr: 0(0); Du: 0(7.98472e-13) 0s
+Solving the original LP from the solution after postsolve
+Model   status      : Optimal
+Simplex   iterations: 40
+Objective value     :  3.8063333333e+03
+HiGHS run time      :          0.01
+Loaded 10450 routes (8251 distinct)
+Ignored 3978 routes which do not pass any counting location
+Starting optimization for interval [0.0, 3700.0] (mismatch 61018)
+Optimization succeeded
+Wrote 3807 routes (8 distinct) achieving total count 61020 (100.00%) at 47 locations. GEH<5.0 for 100.00%
+Warning: overflow locations: count 2, min -1.00 (('1420544882#1',)), max -1.00 (('1420544882#1',)), mean -1.00, Q1 -1.00, median -1.00, Q3 -1.00 (total -2)
+

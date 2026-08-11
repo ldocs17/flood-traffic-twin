@@ -60,12 +60,16 @@ DEFAULT_SCENARIO_NAME = "Sep_30_2022_74.75"
 
 
 def _base_sumo_cmd(
-    seed: int, extra_outputs: dict, rerouting_fraction: float = DEFAULT_REROUTING_FRACTION
+    seed: int,
+    extra_outputs: dict,
+    rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
+    demand_variant: str = paths.DEFAULT_DEMAND_VARIANT,
 ) -> List[str]:
+    route_file = paths.route_file_for_demand(demand_variant)
     cmd = [
         sumo_binary("sumo"),
         "--net-file", str(paths.NET_FILE),
-        "--route-files", str(paths.ROUTE_FILE),
+        "--route-files", str(route_file),
         "--begin", "0",
         "--end", str(paths.SIM_END_S),
         "--seed", str(seed),
@@ -96,7 +100,9 @@ def compute_edge_states(net, scenario_npy: Path, frame_index: int = FRAME_INDEX)
 
 
 def run_baseline(
-    seed: int = DEFAULT_SEED, rerouting_fraction: float = DEFAULT_REROUTING_FRACTION
+    seed: int = DEFAULT_SEED,
+    rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
+    demand_variant: str = paths.DEFAULT_DEMAND_VARIANT,
 ) -> Path:
     """Plain (no-TraCI) baseline run: same net/demand/rerouting settings as
     the flooded run, but no edge closures.
@@ -107,7 +113,14 @@ def run_baseline(
     baseline/flooded pair at each fraction -- see
     ``floodtwin.analysis.sweep`` for why the baseline is swept too, not just
     the flooded run.
+
+    ``demand_variant`` (Slice 7, D6): which route file to use -- see
+    ``floodtwin.sim.paths.DEMAND_VARIANTS`` (``"v1"`` = the original
+    randomTrips placeholder demand, ``"calibrated_v2"`` = the
+    VDOT-routeSampler-calibrated demand). Default preserves prior slices'
+    behavior.
     """
+    route_file = paths.route_file_for_demand(demand_variant)
     run_dir = artifact.make_run_dir("baseline")
     outputs = {
         "--fcd-output": run_dir / "fcd.xml",
@@ -115,7 +128,7 @@ def run_baseline(
         "--summary-output": run_dir / "summary.xml",
         "--vehroute-output": run_dir / "vehroutes.xml",
     }
-    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction)
+    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction, demand_variant=demand_variant)
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     (run_dir / "sumo_stdout.log").write_text(result.stdout)
@@ -131,7 +144,8 @@ def run_baseline(
     config = {
         "scenario": "baseline_no_flood",
         "net_file": str(paths.NET_FILE),
-        "route_file": str(paths.ROUTE_FILE),
+        "route_file": str(route_file),
+        "demand_variant": demand_variant,
         "seed": seed,
         "begin_s": 0,
         "end_s": paths.SIM_END_S,
@@ -364,6 +378,7 @@ def run_flooded_multiframe(
     run_name: str = flood_paths.DEFAULT_RUN_NAME,
     rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
     manual_closures: Optional[Iterable[str]] = None,
+    demand_variant: str = paths.DEFAULT_DEMAND_VARIANT,
 ) -> Path:
     """Slice 2: TraCI-controlled run with the full Pregnolato speed curve
     applied at all four 15-min marks (900/1800/2700/3600s), using a real
@@ -379,7 +394,11 @@ def run_flooded_multiframe(
     run, additive to (never a replacement for) the flood-derived
     closures/speeds above -- see
     ``floodtwin.sim.controller.run_with_edge_states``.
+
+    ``demand_variant`` (Slice 7, D6): which route file to use -- see
+    ``floodtwin.sim.paths.DEMAND_VARIANTS``.
     """
+    route_file = paths.route_file_for_demand(demand_variant)
     run_dir = artifact.make_run_dir("flooded_multiframe")
     net = sumolib.net.readNet(str(paths.NET_FILE))
     manual_closures = validate_manual_closures(net, manual_closures)
@@ -414,7 +433,7 @@ def run_flooded_multiframe(
         "--summary-output": run_dir / "summary.xml",
         "--vehroute-output": run_dir / "vehroutes.xml",
     }
-    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction)
+    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction, demand_variant=demand_variant)
     apply_result = run_with_edge_states(
         cmd, edge_states_by_mark, float(paths.SIM_END_S), manual_closures=manual_closures
     )
@@ -445,7 +464,8 @@ def run_flooded_multiframe(
         "forecast_npz": str(forecast_npz),
         "forecast_meta": forecast_meta,
         "net_file": str(paths.NET_FILE),
-        "route_file": str(paths.ROUTE_FILE),
+        "route_file": str(route_file),
+        "demand_variant": demand_variant,
         "seed": seed,
         "begin_s": 0,
         "end_s": paths.SIM_END_S,
@@ -532,10 +552,22 @@ def main():
             "into a new runs/<ts>_metrics_<scenario>/ dir (see floodtwin.analysis.metrics)."
         ),
     )
+    parser.add_argument(
+        "--demand",
+        default=paths.DEFAULT_DEMAND_VARIANT,
+        choices=sorted(paths.DEMAND_VARIANTS),
+        help=(
+            "Slice 7 (D6): which route file to run -- 'v1' is the original "
+            "randomTrips placeholder demand (illustrative, see "
+            "data/demand/README.md); 'calibrated_v2' is the VDOT-routeSampler-"
+            "calibrated demand (data/demand/calibrated_v2/README.md). Default "
+            f"{paths.DEFAULT_DEMAND_VARIANT!r} preserves prior slices' behavior."
+        ),
+    )
     args = parser.parse_args()
 
-    print(f"Running baseline (no closures, rerouting_fraction={args.rerouting_fraction})...")
-    baseline_dir = run_baseline(seed=args.seed, rerouting_fraction=args.rerouting_fraction)
+    print(f"Running baseline (no closures, rerouting_fraction={args.rerouting_fraction}, demand={args.demand})...")
+    baseline_dir = run_baseline(seed=args.seed, rerouting_fraction=args.rerouting_fraction, demand_variant=args.demand)
     print(f"  -> {baseline_dir}")
 
     manual_closures = [c.strip() for c in args.manual_closures.split(",") if c.strip()]
@@ -547,6 +579,7 @@ def main():
         run_name=args.run_name,
         rerouting_fraction=args.rerouting_fraction,
         manual_closures=manual_closures,
+        demand_variant=args.demand,
     )
     print(f"  -> {flooded_dir}")
 

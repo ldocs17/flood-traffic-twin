@@ -210,11 +210,18 @@ def run_sweep_point(
     scenario_name: str,
     variant: str,
     run_name: str,
+    demand_variant: str = "v1",
 ) -> dict:
     """Run one ``(fraction, seed)`` point: a matched baseline + flooded run
     at this rerouting fraction and seed (see the module docstring for why
     the baseline is re-run per point, not shared across the sweep), scored
     with Slice 3's ``compute_metrics``. Returns a :func:`sweep_point_row`.
+
+    ``demand_variant`` (Slice 7, D6): which route file both runs in the pair
+    use -- see ``floodtwin.sim.paths.DEMAND_VARIANTS``. Default ``"v1"``
+    (not imported from ``floodtwin.sim.paths`` to keep this module's default
+    argument evaluable without the lazy ``sumolib`` import below) matches
+    ``floodtwin.sim.paths.DEFAULT_DEMAND_VARIANT``.
 
     Lazily imports ``floodtwin.sim.runner`` (which imports ``sumolib`` at
     module load) so this module stays importable -- and its pure functions
@@ -223,13 +230,14 @@ def run_sweep_point(
     from floodtwin.sim import runner  # lazy: sumolib import, see module docstring
 
     fraction = fraction_pct / 100.0
-    baseline_dir = runner.run_baseline(seed=seed, rerouting_fraction=fraction)
+    baseline_dir = runner.run_baseline(seed=seed, rerouting_fraction=fraction, demand_variant=demand_variant)
     flooded_dir = runner.run_flooded_multiframe(
         scenario_name=scenario_name,
         seed=seed,
         variant=variant,
         run_name=run_name,
         rerouting_fraction=fraction,
+        demand_variant=demand_variant,
     )
     metrics, _per_trip = compute_metrics(baseline_dir, flooded_dir)
     return sweep_point_row(fraction_pct, seed, baseline_dir, flooded_dir, metrics)
@@ -336,11 +344,18 @@ def run_sweep(
     variant: Optional[str] = None,
     run_name: Optional[str] = None,
     out_dir: Optional["Path | str"] = None,
+    demand_variant: str = "v1",
 ) -> Path:
     """Full Slice 4 pipeline: run the fraction x seed grid, aggregate across
     seeds, and write ``sweep_results.csv`` + ``sweep_summary.json`` +
     ``rerouting_sweep.png`` into a fresh ``runs/<ts>_sweep_<scenario>/`` dir
     (default) or ``out_dir``.
+
+    ``demand_variant`` (Slice 7, D6): which route file every point in the
+    sweep uses -- see ``floodtwin.sim.paths.DEMAND_VARIANTS``. Default
+    ``"v1"`` matches ``floodtwin.sim.paths.DEFAULT_DEMAND_VARIANT`` (kept as
+    a plain string here, not imported, for the same reason as
+    :func:`run_sweep_point`).
     """
     # Lazy: only need these to fill in flood_paths defaults without forcing
     # a SUMO import at module load (flood_paths itself is TF/SUMO-free, but
@@ -358,8 +373,8 @@ def run_sweep(
     for fraction_pct in fractions_pct:
         for seed in seed_list:
             n += 1
-            print(f"[{n}/{total}] fraction={fraction_pct}% seed={seed} ...")
-            row = run_sweep_point(fraction_pct, seed, scenario_name, variant, run_name)
+            print(f"[{n}/{total}] fraction={fraction_pct}% seed={seed} demand={demand_variant} ...")
+            row = run_sweep_point(fraction_pct, seed, scenario_name, variant, run_name, demand_variant=demand_variant)
             rows.append(row)
             mean_d = row["mean_travel_time_delta_s"]
             p95_d = row["p95_travel_time_delta_s"]
@@ -371,18 +386,19 @@ def run_sweep(
 
     agg = aggregate_sweep_results(rows)
 
-    out_dir = Path(out_dir) if out_dir is not None else make_sweep_dir(scenario_name)
+    out_dir = Path(out_dir) if out_dir is not None else make_sweep_dir(f"{scenario_name}_{demand_variant}")
     out_dir.mkdir(parents=True, exist_ok=True)
 
     csv_path = write_sweep_csv(rows, out_dir / "sweep_results.csv")
     fig_path = plot_sweep_figure(
         rows, agg, out_dir / "rerouting_sweep.png",
-        title=f"Information sweep: {scenario_name} (n_seeds={len(seed_list)})",
+        title=f"Information sweep: {scenario_name} (n_seeds={len(seed_list)}, demand={demand_variant})",
     )
 
     summary = {
         "generated_at": datetime.now().isoformat(),
         "scenario": scenario_name,
+        "demand_variant": demand_variant,
         "variant": variant,
         "run_name": run_name,
         "fractions_pct": list(fractions_pct),
@@ -452,6 +468,17 @@ def main():
     parser.add_argument("--variant", default=None, help="Flood model variant (default: floodtwin.flood.paths.DEFAULT_VARIANT)")
     parser.add_argument("--run-name", default=None, help="Flood model run name (default: floodtwin.flood.paths.DEFAULT_RUN_NAME)")
     parser.add_argument("--out-dir", type=Path, default=None)
+    parser.add_argument(
+        "--demand",
+        default="v1",
+        choices=["v1", "calibrated_v2"],
+        help=(
+            "Slice 7 (D6): which route file every point in the sweep uses -- "
+            "'v1' (original randomTrips placeholder, illustrative) or "
+            "'calibrated_v2' (VDOT-routeSampler-calibrated). Default 'v1' "
+            "preserves Slice 4 behavior."
+        ),
+    )
     args = parser.parse_args()
 
     fractions_pct = [float(x) for x in args.fractions.split(",") if x.strip() != ""]
@@ -461,6 +488,7 @@ def main():
         scenario_name=args.scenario,
         fractions_pct=fractions_pct,
         n_seeds=args.n_seeds,
+        demand_variant=args.demand,
         base_seed=args.base_seed,
         seeds=seeds,
         variant=args.variant,
