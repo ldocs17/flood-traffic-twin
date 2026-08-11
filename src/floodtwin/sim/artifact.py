@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, Iterable, Optional, Set
 
-from floodtwin.coupling.edge_mapper import depth_to_mm
+from floodtwin.coupling.edge_mapper import DEPTH_SCALE_M, depth_to_mm
 
 from .paths import RUNS_DIR
 
@@ -35,11 +35,16 @@ def write_edge_state_table(
     net,
     edge_depths_normalized: Dict[str, float],
     closed: Set[str],
+    depth_scale_m: float = DEPTH_SCALE_M,
 ) -> Path:
     """Edge-state table (PROJECT_PLAN.md #2): edge_id, max_depth_m, v_max_ms,
     closed. Written for every edge in the net -- edges with no flood-grid
     overlap get max_depth_m = 0.0 / closed = 0, which is the correct "dry"
-    state, not a missing value."""
+    state, not a missing value.
+
+    ``depth_scale_m`` (Slice 8): passed through to :func:`depth_to_mm` so the
+    recorded ``max_depth_m`` column reflects whatever scale a sensitivity run
+    actually used, not always the module default."""
     path = run_dir / "edge_states.csv"
     with open(path, "w", newline="") as f:
         w = csv.writer(f)
@@ -47,7 +52,7 @@ def write_edge_state_table(
         for edge in net.getEdges():
             eid = edge.getID()
             depth_norm = edge_depths_normalized.get(eid, 0.0)
-            depth_m = depth_to_mm(depth_norm) / 1000.0
+            depth_m = depth_to_mm(depth_norm, depth_scale_m) / 1000.0
             is_closed = eid in closed
             v_max = 0.0 if is_closed else edge.getSpeed()
             w.writerow([eid, f"{depth_m:.4f}", f"{v_max:.3f}", int(is_closed)])
@@ -59,6 +64,7 @@ def write_multiframe_edge_state_table(
     net,
     edge_depths_by_mark: Dict[float, Dict[str, float]],
     edge_states_by_mark: Dict[float, Dict[str, "tuple"]],
+    depth_scale_m: float = DEPTH_SCALE_M,
 ) -> Path:
     """Slice 2 edge-state table: extends Slice 1's single-frame
     ``edge_states.csv`` with a ``frame_min`` column so all four 15-min marks
@@ -69,6 +75,9 @@ def write_multiframe_edge_state_table(
     flood-grid overlap at a given mark get ``max_depth_m = 0.0`` / their
     unmodified speed limit / ``closed = 0`` (the correct "dry" state, not a
     missing value), matching Slice 1's per-edge coverage guarantee.
+
+    ``depth_scale_m`` (Slice 8): passed through to :func:`depth_to_mm`, see
+    :func:`write_edge_state_table`.
     """
     path = run_dir / "edge_states.csv"
     marks = sorted(edge_states_by_mark.keys())
@@ -83,7 +92,7 @@ def write_multiframe_edge_state_table(
             for edge in edges:
                 eid = edge.getID()
                 depth_norm = depths.get(eid, 0.0)
-                depth_m = depth_to_mm(depth_norm) / 1000.0
+                depth_m = depth_to_mm(depth_norm, depth_scale_m) / 1000.0
                 v_max, is_closed = states.get(eid, (edge.getSpeed(), False))
                 w.writerow([frame_min, eid, f"{depth_m:.4f}", f"{v_max:.3f}", int(is_closed)])
     return path

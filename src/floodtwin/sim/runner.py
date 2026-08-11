@@ -59,11 +59,19 @@ FRAME_LABELS = ("t+15min", "t+30min", "t+45min", "t+60min")
 DEFAULT_SCENARIO_NAME = "Sep_30_2022_74.75"
 
 
+# Slice 8 (PROJECT_PLAN.md Slice 8 sensitivity axis "rerouting period"):
+# how often SUMO's rerouting device recomputes routes, in seconds. Slices 1-7
+# hardcoded this at 120s (IMPLEMENTATION_CONTEXT.md #3); preserved here as
+# the default so existing callers are unaffected.
+DEFAULT_REROUTING_PERIOD_S = 120
+
+
 def _base_sumo_cmd(
     seed: int,
     extra_outputs: dict,
     rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
     demand_variant: str = paths.DEFAULT_DEMAND_VARIANT,
+    rerouting_period_s: int = DEFAULT_REROUTING_PERIOD_S,
 ) -> List[str]:
     route_file = paths.route_file_for_demand(demand_variant)
     cmd = [
@@ -75,7 +83,7 @@ def _base_sumo_cmd(
         "--seed", str(seed),
         "--time-to-teleport", "-1",
         "--device.rerouting.probability", str(rerouting_fraction),
-        "--device.rerouting.period", "120",
+        "--device.rerouting.period", str(rerouting_period_s),
         "--no-step-log", "true",
         # A small-district flood closure can isolate a pocket of edges with
         # no remaining path to a vehicle's destination (observed with this
@@ -103,6 +111,7 @@ def run_baseline(
     seed: int = DEFAULT_SEED,
     rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
     demand_variant: str = paths.DEFAULT_DEMAND_VARIANT,
+    rerouting_period_s: int = DEFAULT_REROUTING_PERIOD_S,
 ) -> Path:
     """Plain (no-TraCI) baseline run: same net/demand/rerouting settings as
     the flooded run, but no edge closures.
@@ -119,6 +128,10 @@ def run_baseline(
     randomTrips placeholder demand, ``"calibrated_v2"`` = the
     VDOT-routeSampler-calibrated demand). Default preserves prior slices'
     behavior.
+
+    ``rerouting_period_s`` (Slice 8 sensitivity axis): how often the
+    rerouting device recomputes routes. Default preserves Slices 1-7's
+    hardcoded 120s.
     """
     route_file = paths.route_file_for_demand(demand_variant)
     run_dir = artifact.make_run_dir("baseline")
@@ -128,7 +141,13 @@ def run_baseline(
         "--summary-output": run_dir / "summary.xml",
         "--vehroute-output": run_dir / "vehroutes.xml",
     }
-    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction, demand_variant=demand_variant)
+    cmd = _base_sumo_cmd(
+        seed,
+        outputs,
+        rerouting_fraction=rerouting_fraction,
+        demand_variant=demand_variant,
+        rerouting_period_s=rerouting_period_s,
+    )
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     (run_dir / "sumo_stdout.log").write_text(result.stdout)
@@ -150,7 +169,7 @@ def run_baseline(
         "begin_s": 0,
         "end_s": paths.SIM_END_S,
         "rerouting_probability": rerouting_fraction,
-        "rerouting_period_s": 120,
+        "rerouting_period_s": rerouting_period_s,
         "time_to_teleport": -1,
         "closures": [],
         "closure_time_s": None,
@@ -294,17 +313,30 @@ def load_forecast(npz_path: Path) -> Tuple[np.ndarray, georef.GeoTransform, dict
 
 
 def compute_multiframe_edge_states(
-    net, depth_stack: np.ndarray, transform: georef.GeoTransform
+    net,
+    depth_stack: np.ndarray,
+    transform: georef.GeoTransform,
+    aggregation: str = "max",
+    closure_threshold_mm: float = CLOSURE_THRESHOLD_MM,
+    depth_scale_m: float = DEPTH_SCALE_M,
 ) -> Tuple[Dict[float, Dict[str, float]], Dict[float, Dict[str, Tuple[float, bool]]], Dict[str, float]]:
     """Map all four depth-stack frames to per-edge Pregnolato
-    speeds/closures at their 15-min marks (D3/D4, full form)."""
+    speeds/closures at their 15-min marks (D3/D4, full form).
+
+    ``aggregation``/``closure_threshold_mm``/``depth_scale_m`` (Slice 8
+    sensitivity axes): default to D4/D3's original max/300mm/1.0 so every
+    pre-Slice-8 call site is unaffected; passed straight through to
+    ``sample_edge_depths``/``speeds_and_closures``.
+    """
     speed_limits_ms: Dict[str, float] = {e.getID(): e.getSpeed() for e in net.getEdges()}
     edge_depths_by_mark: Dict[float, Dict[str, float]] = {}
     edge_states_by_mark: Dict[float, Dict[str, Tuple[float, bool]]] = {}
     for mark, frame_idx in zip(FRAME_MARKS_S, range(4)):
         depth_grid = depth_stack[:, :, frame_idx]
-        depths = sample_edge_depths(net, depth_grid, transform=transform)
-        states = speeds_and_closures(depths, speed_limits_ms)
+        depths = sample_edge_depths(net, depth_grid, transform=transform, aggregation=aggregation)
+        states = speeds_and_closures(
+            depths, speed_limits_ms, closure_threshold_mm=closure_threshold_mm, depth_scale_m=depth_scale_m
+        )
         edge_depths_by_mark[mark] = depths
         edge_states_by_mark[mark] = states
     return edge_depths_by_mark, edge_states_by_mark, speed_limits_ms
@@ -379,6 +411,10 @@ def run_flooded_multiframe(
     rerouting_fraction: float = DEFAULT_REROUTING_FRACTION,
     manual_closures: Optional[Iterable[str]] = None,
     demand_variant: str = paths.DEFAULT_DEMAND_VARIANT,
+    rerouting_period_s: int = DEFAULT_REROUTING_PERIOD_S,
+    closure_threshold_mm: float = CLOSURE_THRESHOLD_MM,
+    depth_scale_m: float = DEPTH_SCALE_M,
+    aggregation: str = "max",
 ) -> Path:
     """Slice 2: TraCI-controlled run with the full Pregnolato speed curve
     applied at all four 15-min marks (900/1800/2700/3600s), using a real
@@ -397,6 +433,15 @@ def run_flooded_multiframe(
 
     ``demand_variant`` (Slice 7, D6): which route file to use -- see
     ``floodtwin.sim.paths.DEMAND_VARIANTS``.
+
+    ``rerouting_period_s``/``closure_threshold_mm``/``depth_scale_m``/
+    ``aggregation`` (Slice 8, PROJECT_PLAN.md Slice 8 sensitivity axes):
+    default to Slices 1-7's hardcoded values (120s / 300mm / 1.0 / "max") so
+    every existing caller (CLI, API, Slice 4/7 sweeps) is unaffected. See
+    ``floodtwin.analysis.sensitivity`` for the sweep that varies each one.
+    ``variant``/``run_name`` (the flood-model-checkpoint axis) were already
+    parameterized since Slice 2 -- pass ``variant="v4",
+    run_name="v4_random_s42"`` for the balanced checkpoint.
     """
     route_file = paths.route_file_for_demand(demand_variant)
     run_dir = artifact.make_run_dir("flooded_multiframe")
@@ -407,7 +452,12 @@ def run_flooded_multiframe(
     depth_stack, transform, forecast_meta = load_forecast(forecast_npz)
 
     edge_depths_by_mark, edge_states_by_mark, speed_limits_ms = compute_multiframe_edge_states(
-        net, depth_stack, transform
+        net,
+        depth_stack,
+        transform,
+        aggregation=aggregation,
+        closure_threshold_mm=closure_threshold_mm,
+        depth_scale_m=depth_scale_m,
     )
     # Slice 6: the edge-state *table* (edge_states.csv -> the API's
     # /edge_states endpoint -> the frontend's edge coloring) is written from
@@ -425,7 +475,9 @@ def run_flooded_multiframe(
     for mark_states in edge_states_by_mark.values():
         for edge_id in manual_closures:
             mark_states[edge_id] = (0.0, True)
-    artifact.write_multiframe_edge_state_table(run_dir, net, edge_depths_by_mark, edge_states_by_mark)
+    artifact.write_multiframe_edge_state_table(
+        run_dir, net, edge_depths_by_mark, edge_states_by_mark, depth_scale_m=depth_scale_m
+    )
 
     outputs = {
         "--fcd-output": run_dir / "fcd.xml",
@@ -433,7 +485,13 @@ def run_flooded_multiframe(
         "--summary-output": run_dir / "summary.xml",
         "--vehroute-output": run_dir / "vehroutes.xml",
     }
-    cmd = _base_sumo_cmd(seed, outputs, rerouting_fraction=rerouting_fraction, demand_variant=demand_variant)
+    cmd = _base_sumo_cmd(
+        seed,
+        outputs,
+        rerouting_fraction=rerouting_fraction,
+        demand_variant=demand_variant,
+        rerouting_period_s=rerouting_period_s,
+    )
     apply_result = run_with_edge_states(
         cmd, edge_states_by_mark, float(paths.SIM_END_S), manual_closures=manual_closures
     )
@@ -470,10 +528,11 @@ def run_flooded_multiframe(
         "begin_s": 0,
         "end_s": paths.SIM_END_S,
         "rerouting_probability": rerouting_fraction,
-        "rerouting_period_s": 120,
+        "rerouting_period_s": rerouting_period_s,
         "time_to_teleport": -1,
-        "depth_scale_m": DEPTH_SCALE_M,
-        "closure_threshold_mm": CLOSURE_THRESHOLD_MM,
+        "depth_scale_m": depth_scale_m,
+        "closure_threshold_mm": closure_threshold_mm,
+        "edge_depth_aggregation": aggregation,
         "frame_marks_s": list(FRAME_MARKS_S),
         "frame_labels": list(FRAME_LABELS),
         "manual_closures": manual_closures,

@@ -190,7 +190,7 @@ PR referencing it with demo evidence, reviewed and merged by the orchestration a
 | R4 | Teleport artifacts corrupt congestion results | Teleport count is a first-class run-health metric from Slice 2 on; runs with teleports > 0 are flagged invalid. |
 | R5 | 320 m flood patch too small to produce interesting rerouting | Slice 1 answers this empirically in week one. If detours are trivial, options: pick a storm with wider extent, or add manual closures as the intervention story. |
 | R6 | Random demand undermines paper claims | D6: labeled illustrative until Slice 7; framing until then is "coupling methodology". |
-| R7 | Model outputs are in **normalized depth units** with an unknown scale factor, but the Pregnolato curve needs real mm | Single `DEPTH_SCALE_M` constant (interim 1.0), figures caveated "units pending", scale included in Slice 8 sensitivity. Confirm the constant with Yidi/Wang (IMPLEMENTATION_CONTEXT Q2) before final paper figures. |
+| R7 | Model outputs are in **normalized depth units** with an unknown scale factor, but the Pregnolato curve needs real mm | Single `DEPTH_SCALE_M` constant (interim 1.0), figures caveated "units pending", scale included in Slice 8 sensitivity. Confirm the constant with Yidi/Wang (IMPLEMENTATION_CONTEXT Q2) before final paper figures. **Slice 8 result (see [SENSITIVITY.md](SENSITIVITY.md)): confirmed the highest-impact axis by far** — halving/doubling `DEPTH_SCALE_M` swings the headline mean travel-time delta by -62%/+14%, an order of magnitude more than closure threshold, aggregation, rerouting period, or seed. Q2 remains open; this is now known to matter more than a caveat implied. |
 
 ## 5. Open questions (tracked, non-blocking)
 

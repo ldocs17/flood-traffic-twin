@@ -262,3 +262,119 @@ def test_sample_edge_depths_respects_custom_transform():
     net = _FakeNet([edge])
     depths = sample_edge_depths(net, grid, transform=custom)
     assert depths["e"] == pytest.approx(0.77)
+
+
+# ---------------------------------------------------------------------------
+# Slice 8 (PROJECT_PLAN.md Slice 8, sensitivity/robustness): the parameter
+# plumbing added on top of the module constants -- every function keeps its
+# pre-Slice-8 default behavior, and every new keyword argument actually
+# changes the result when passed explicitly.
+# ---------------------------------------------------------------------------
+
+
+def test_depth_to_mm_default_matches_module_constant():
+    assert depth_to_mm(0.3) == pytest.approx(0.3 * DEPTH_SCALE_M * 1000.0)
+
+
+def test_depth_to_mm_respects_explicit_scale():
+    assert depth_to_mm(0.3, depth_scale_m=2.0) == pytest.approx(0.3 * 2.0 * 1000.0)
+    assert depth_to_mm(0.3, depth_scale_m=0.5) == pytest.approx(0.3 * 0.5 * 1000.0)
+
+
+def test_closed_edges_respects_explicit_threshold_and_scale():
+    depths = {"a": 0.25}  # 250mm at DEPTH_SCALE_M=1.0
+    assert closed_edges(depths, threshold_mm=300.0) == set()  # default threshold: not closed
+    assert closed_edges(depths, threshold_mm=200.0) == {"a"}  # lower threshold: now closed
+    # Scaling depth down means the same raw depth no longer crosses 300mm.
+    assert closed_edges(depths, threshold_mm=300.0, depth_scale_m=2.0) == {"a"}  # 500mm >= 300mm
+
+
+def test_pregnolato_curve_respects_explicit_closure_threshold():
+    # Same curve, but the impassable cutoff moves.
+    assert pregnolato_v_safe_kmh(250.0, closure_threshold_mm=200.0) is None  # would be open at default 300mm
+    assert pregnolato_v_safe_kmh(250.0) is not None  # default (300mm) still open at 250mm
+    assert pregnolato_v_safe_kmh(350.0, closure_threshold_mm=400.0) is not None  # default would close at 300mm
+
+
+def test_edge_speed_ms_respects_explicit_closure_threshold():
+    v_max, closed = edge_speed_ms(depth_mm=350.0, speed_limit_ms=13.4, closure_threshold_mm=400.0)
+    assert closed is False
+    assert v_max > 0.0
+    v_max2, closed2 = edge_speed_ms(depth_mm=350.0, speed_limit_ms=13.4)  # default 300mm threshold
+    assert closed2 is True
+    assert v_max2 == 0.0
+
+
+def test_speeds_and_closures_respects_explicit_threshold_and_scale():
+    speed_limits = {"e": 13.4}
+    depths_normalized = {"e": 0.35}  # 350mm at scale 1.0
+    # Default (300mm threshold): closed.
+    assert speeds_and_closures(depths_normalized, speed_limits)["e"][1] is True
+    # Raised threshold (400mm): open.
+    assert speeds_and_closures(depths_normalized, speed_limits, closure_threshold_mm=400.0)["e"][1] is False
+    # Halved depth scale (350mm -> 175mm): open even at the default threshold.
+    assert speeds_and_closures(depths_normalized, speed_limits, depth_scale_m=0.5)["e"][1] is False
+
+
+# ---------------------------------------------------------------------------
+# Slice 8: edge-depth aggregation (D4's own "one-line change" note) -- max
+# (default, unchanged) vs percentile.
+# ---------------------------------------------------------------------------
+
+
+def test_sample_edge_depths_default_aggregation_is_max():
+    grid = np.zeros((128, 128))
+    grid[50, 60] = 0.9
+    grid[50, 61] = 0.1
+    lon0, lat0 = georef.rowcol_to_lonlat(50, 60)
+    lon1, lat1 = georef.rowcol_to_lonlat(50, 61)
+    edge = _FakeEdge("e", [(lon0, lat0), (lon1, lat1)])
+    net = _FakeNet([edge])
+    depths = sample_edge_depths(net, grid, spacing_m=0.5)
+    assert depths["e"] == pytest.approx(0.9)
+
+
+def test_sample_edge_depths_p95_aggregation_differs_from_max():
+    # Many shallow samples and one deep outlier -- p95 should land well below
+    # the max (unlike the default max rule). Square grid/transform chosen so
+    # (lon, lat) = (col, 99 - row) exactly -- no nearest-neighbor rounding
+    # ambiguity -- and a shape point per column (unit spacing, spacing_m=1.0
+    # so _interpolate_points doesn't sub-sample within a 1-unit segment).
+    grid = np.zeros((100, 100))
+    grid[50, :99] = 0.1
+    grid[50, 99] = 5.0  # a single deep outlier at the far (last-column) end
+    transform = georef.GeoTransform(north=99.0, south=0.0, east=99.0, west=0.0, grid_size=100)
+    shape = [(float(c), 49.0) for c in range(100)]  # row = 99-49 = 50 for every point
+    edge = _FakeEdge("e", shape)
+    net = _FakeNet([edge])
+
+    depths_max = sample_edge_depths(net, grid, spacing_m=1.0, transform=transform, aggregation="max")
+    depths_p95 = sample_edge_depths(net, grid, spacing_m=1.0, transform=transform, aggregation="p95")
+
+    assert depths_max["e"] == pytest.approx(5.0)
+    assert depths_p95["e"] < depths_max["e"]
+    assert depths_p95["e"] == pytest.approx(0.1, abs=0.05)  # 95th percentile of mostly-0.1 samples
+
+
+def test_sample_edge_depths_unknown_aggregation_raises():
+    grid = np.zeros((128, 128))
+    grid[0, 0] = 0.5
+    lon, lat = georef.rowcol_to_lonlat(0, 0)
+    edge = _FakeEdge("e", [(lon, lat), (lon, lat)])
+    net = _FakeNet([edge])
+    with pytest.raises(ValueError):
+        sample_edge_depths(net, grid, aggregation="bogus")
+
+
+def test_percentile_matches_numpy_linear_interpolation():
+    from floodtwin.coupling.edge_mapper import _percentile
+
+    values = [1.0, 2.0, 3.0, 4.0, 10.0, 20.0, 30.0, 40.0, 100.0, 200.0]
+    for pct in (0, 25, 50, 75, 95, 100):
+        assert _percentile(values, pct) == pytest.approx(float(np.percentile(values, pct)))
+
+
+def test_percentile_single_sample():
+    from floodtwin.coupling.edge_mapper import _percentile
+
+    assert _percentile([0.42], 95) == pytest.approx(0.42)
