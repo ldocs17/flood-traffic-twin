@@ -13,7 +13,7 @@ slice per loop iteration; the orchestrator verifies before checking it off here.
 | 5 | Web replay of a completed run | SG3 | **done** |
 | 6 | Run from the browser | SG3 | **done** |
 | 7 | Calibrated demand | SG4 | **done** |
-| 8 | Sensitivity and robustness | SG4 | pending |
+| 8 | Sensitivity and robustness | SG4 | **done** |
 
 SG5 (live-data upgrade path) is explicitly flagged-not-scheduled in the plan — excluded
 from this loop.
@@ -229,3 +229,71 @@ on `main`. `PROGRESS.md` is still orchestrator-owned — subagents never edit it
   demand (only routes touching a counted edge), not full-district demand like `v1` --
   documented prominently in `data/demand/calibrated_v2/README.md` as an honest scope
   limitation, not glossed over.
+
+- **2026-08-11, Slice 8 done -- sensitivity and robustness (last slice in the plan).**
+  Six sensitivity axes over the coupling/model layer (not the demand layer -- that was
+  Slice 7), each varied one-at-a-time against the Slices 1-7 baseline (v1 checkpoint,
+  300mm closure threshold, max aggregation, 120s rerouting period,
+  `DEPTH_SCALE_M=1.0`), scenario `Sep_30_2022_74.75` @ 100% rerouting (the established
+  headline point): closure threshold (200/300/400mm), edge-depth aggregation (max/p95),
+  rerouting period (60/120/300s), seed (42/43/44), `DEPTH_SCALE_M` (0.5/1.0/2.0), and
+  flood-model checkpoint (v1 vs v4). All four new parameters
+  (`closure_threshold_mm`/`depth_scale_m`/`aggregation` on
+  `src/floodtwin/coupling/edge_mapper.py`, `rerouting_period_s` on
+  `src/floodtwin/sim/runner.py`) default to the pre-Slice-8 hardcoded values, so no
+  existing call site changed behavior. New `src/floodtwin/analysis/sensitivity.py`
+  (11-point sweep) + `SENSITIVITY.md` (full table + writeup for the paper's limitations
+  section). [Issue #8](https://github.com/ldocs17/flood-traffic-twin/issues/8), [PR
+  #9](https://github.com/ldocs17/flood-traffic-twin/pull/9). 180/180 tests pass (34
+  new).
+
+  **Real infrastructure blocker hit and handled honestly, not papered over**: the
+  flood-model-checkpoint axis (v1 vs v4) -- the one question this slice exists
+  specifically to answer ("do routing conclusions survive the flood paper's own
+  precision/recall trade-off?") -- crashed with a native access violation. Root cause
+  (independently diagnosed by both the orchestrator and the implementer, matching
+  exactly): the Python 3.13/Keras-3 interpreter `flood_runner` inference depends on
+  (IMPLEMENTATION_CONTEXT.md G2) has `numpy==1.26.4` installed from a from-source
+  MinGW-W64 build -- no official `cp313-win_amd64` wheel exists for that pin, and
+  numpy's own runtime warning says "CRASHES ARE TO BE EXPECTED." `python -c "import
+  numpy"` alone segfaults, 100% reproducible, in that interpreter -- unrelated to v4
+  specifically; every other sweep point reused an already-warm `v1_random_s42` cached
+  forecast and never touched that interpreter, so the checkpoint axis was the only
+  point that exposed this pre-existing environment defect. Not fixed as part of this
+  slice (changing the numpy/Python-3.13 pin risks destabilizing the already-verified
+  Slice 2 weights-loading pipeline) -- flagged as a separate follow-up task instead.
+  **Operational lesson layered on top of Slice 4/7's**: the original
+  `run_sensitivity` implementation let this one point's uncaught exception take the
+  whole sweep down, losing the 10 already-completed points too (they only existed in
+  an in-memory list). Fixed as part of this slice, on the orchestrator's instruction,
+  as a legitimate robustness improvement to a *robustness-analysis tool*: each point's
+  run is now wrapped in try/except, a failed point is recorded as a clearly-marked
+  error row (real exception message, every metric field `None`, never fabricated)
+  rather than crashing, and results are rewritten to disk after every point (not just
+  at the end).
+
+  Verified independently before merging: checked out the branch into a separate
+  worktree, reran the full suite (180/180), read the parameter-plumbing diffs (every
+  default preserves prior behavior), and **independently re-ran the entire 11-point
+  sweep myself from scratch** -- matched the PR's reported numbers to the decimal on
+  all 10 completed points (one harmless 0.1s rounding difference on a single p95
+  value), 0 teleports/collisions on all 10, and the checkpoint axis errored out with
+  the identical exception pattern in my own run too, confirming both that the
+  environment blocker is real/reproducible (not a fluke) and that the fault-tolerance
+  fix genuinely works end-to-end.
+
+  **Headline sensitivity findings** (full table + interpretation in `SENSITIVITY.md`):
+  closure threshold, aggregation, rerouting period, and seed all move the headline
+  mean/p95 travel-time delta by single-digit percentages (-0.4% to +10.3%), never flip
+  its sign -- robust, and no more uncertain than ordinary seed-to-seed noise (~7% band
+  across seeds 42-44 alone). `DEPTH_SCALE_M` is a different story: halving it (0.5)
+  cuts the mean delta 62% and nearly eliminates closures (3.1% -> 0.1% of edges);
+  doubling it (2.0) pushes the delta up 14% and closures up 43% -- an order of
+  magnitude more consequential than every other axis combined, confirming Risk R7's
+  concern was well-founded rather than resolving Open Question Q2 (still open,
+  `PROJECT_PLAN.md`'s R7 row now points to this result). The flood-model-checkpoint
+  question is a confirmed **open item**, not answered, due to the environment blocker
+  above.
+
+  This closes PROJECT_PLAN.md's full vertical-slice roadmap (SG1-SG4, 8/8 slices
+  done); SG5 (live-data upgrade path) remains explicitly flagged-not-scheduled.
