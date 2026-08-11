@@ -1,0 +1,278 @@
+{
+  "generated_at": "2026-08-11T03:38:41.727140+00:00",
+  "net_file": "C:\\Users\\dcost\\ChandraMentorship\\flood-traffic-twin\\.claude\\worktrees\\agent-a2b12d6b181a24008\\data\\net\\district.net.xml",
+  "raw_geojson": "C:\\Users\\dcost\\ChandraMentorship\\flood-traffic-twin\\.claude\\worktrees\\agent-a2b12d6b181a24008\\data\\demand\\vdot_counts\\raw_query_district.geojson",
+  "road_segments_json": "C:\\Users\\dcost\\ChandraMentorship\\sumo_norfolk\\road_segments.json",
+  "corridor_tolerance_m": 20.0,
+  "segment_match_tolerance_m": 25.0,
+  "min_hits": 2,
+  "n_calibration_segments": 9,
+  "n_excluded_vdot_records": 69,
+  "excluded_reasons": [
+    "not a Hampton Blvd / Colley Ave corridor record"
+  ],
+  "n_corridor_candidate_edges": {
+    "hampton_blvd": 60,
+    "colley_ave": 31
+  },
+  "n_total_edges_in_net": 948,
+  "n_edges_with_real_count": 47,
+  "per_segment": [
+    {
+      "corridor": "colley_ave",
+      "start_label": "27th St",
+      "end_label": "52rd Street",
+      "adt": 12000,
+      "adt_quality": "G",
+      "k_factor": 0.0898,
+      "peak_hour_volume_bidirectional": 1077.6000000000001,
+      "source_objectids": [
+        7131,
+        75116,
+        76431
+      ],
+      "route_common_names": [
+        "Colley AVE (NP - City of Norfolk)",
+        "Colley AVE (PR - City of Norfolk)"
+      ],
+      "n_candidate_edges_in_corridor": 31,
+      "n_raw_hits": 31,
+      "n_after_min_hits_filter": 15,
+      "n_final_matched_edges": 8,
+      "per_edge_entered_count": 538.8000000000001,
+      "final_matched_edge_ids": [
+        "-1420544882#0",
+        "-1420544882#1",
+        "-1420544882#11",
+        "-1420544882#2",
+        "1420544882#0",
+        "1420544882#1",
+        "1420544882#11",
+        "1420544882#2"
+      ]
+    },
+    {
+      "corridor": "hampton_blvd",
+      "start_label": "SR 406 Terminal Blvd",
+      "end_label": "Admiral Taussig Blvd",
+      "adt": 24000,
+      "adt_quality": "G",
+      "k_factor": 0.0927,
+      "peak_hour_volume_bidirectional": 2224.8,
+      "source_objectids": [
+        63250,
+        90339
+      ],
+      "route_common_names": [
+        "VA-337E",
+        "VA-337W"
+      ],
+      "n_candidate_edges_in_corridor": 60,
+      "n_raw_hits": 0,
+      "n_after_min_hits_filter": 0,
+      "n_final_matched_edges": 0,
+      "per_edge_entered_count": null,
+      "final_matched_edge_ids": []
+    },
+    {
+      "corridor": "hampton_blvd",
+      "start_label": "US 58 Brambleton Ave",
+      "end_label": "21st Street",
+      "adt": 29000,
+      "adt_quality": "G",
+      "k_factor": 0.0801,
+      "peak_hour_volume_bidirectional": 2322.9,
+      "source_objectids": [
+        62700,
+        89967,
+        91872
+      ],
+      "route_common_names": [
+        "VA-337E",
+        "VA-337W"
+      ],
+      "n_candidate_edges_in_corridor": 60,
+      "n_raw_hits": 0,
+      "n_after_min_hits_filter": 0,
+      "n_final_matched_edges": 0,
+      "per_edge_entered_count": null,
+      "final_matched_edge_ids": []
+    },
+    {
+      "corridor": "hampton_blvd",
+      "start_label": "SR 247, 26th St",
+      "end_label": "49th St, Old Dominion University",
+      "adt": 24000,
+      "adt_quality": "G",
+      "k_factor": 0.08120000000000001,
+      "peak_hour_volume_bidirectional": 1948.8000000000002,
+      "source_objectids": [
+        62972,
+        90807
+      ],
+      "route_common_names": [
+        "VA-337E",
+        "VA-337W"
+      ],
+      "n_candidate_edges_in_corridor": 60,
+      "n_raw_hits": 0,
+      "n_after_min_hits_filter": 0,
+      "n_final_matched_edges": 0,
+      "per_edge_entered_count": null,
+      "final_matched_edge_ids": []
+    },
+    {
+      "corridor": "hampton_blvd",
+      "start_label": "21st Street",
+      "end_label": "SR 247, 26th St",
+      "adt": 32000,
+      "adt_quality": "G",
+      "k_factor": 0.08120000000000001,
+      "peak_hour_volume_bidirectional": 2598.4,
+      "source_objectids": [
+        64581,
+        94074
+      ],
+      "route_common_names": [
+        "VA-337E",
+        "VA-337W"
+      ],
+      "n_candidate_edges_in_corridor": 60,
+      "n_raw_hits": 0,
+      "n_after_min_hits_filter": 0,
+      "n_final_matched_edges": 0,
+      "per_edge_entered_count": null,
+      "final_matched_edge_ids": []
+    },
+    {
+      "corridor": "hampton_blvd",
+      "start_label": "49th St, Old Dominion University",
+      "end_label": "SR 165 Little Creek Rd",
+      "adt": 29000,
+      "adt_quality": "A",
+      "k_factor": 0.1003,
+      "peak_hour_volume_bidirectional": 2908.7,
+      "source_objectids": [
+        62899,
+        90192
+      ],
+      "route_common_names": [
+        "VA-337E",
+        "VA-337W"
+      ],
+      "n_candidate_edges_in_corridor": 60,
+      "n_raw_hits": 60,
+      "n_after_min_hits_filter": 58,
+      "n_final_matched_edges": 39,
+      "per_edge_entered_count": 1454.35,
+      "final_matched_edge_ids": [
+        "1215430346#0",
+        "1215430346#1",
+        "1215430346#10",
+        "1215430346#12",
+        "1215430346#2",
+        "1215430346#3",
+        "1215430346#4",
+        "1215430346#6",
+        "1215430346#8",
+        "1358625870",
+        "1358625872",
+        "1358625873",
+        "1361130551",
+        "1383329599#0",
+        "1383329599#1",
+        "1415528645#0",
+        "1415528645#1",
+        "1415528645#2",
+        "1415528646",
+        "1420729728",
+        "1420729730",
+        "1457761612#0",
+        "1457761612#1",
+        "1457761613#0",
+        "20606837#0",
+        "20606837#1",
+        "20606837#3",
+        "20606837#4",
+        "814408481#0",
+        "814408481#2",
+        "814408481#4",
+        "814408481#6",
+        "814408481#7",
+        "823017796#0",
+        "823017796#1",
+        "823017796#2",
+        "823017796#3",
+        "823017796#4",
+        "823017796#6"
+      ]
+    },
+    {
+      "corridor": "colley_ave",
+      "start_label": "21st Street",
+      "end_label": "27th Street",
+      "adt": 6100,
+      "adt_quality": "G",
+      "k_factor": 0.0983,
+      "peak_hour_volume_bidirectional": 599.63,
+      "source_objectids": [
+        6073,
+        76155
+      ],
+      "route_common_names": [
+        "Colley AVE (NP - City of Norfolk)",
+        "Colley AVE (PR - City of Norfolk)"
+      ],
+      "n_candidate_edges_in_corridor": 31,
+      "n_raw_hits": 0,
+      "n_after_min_hits_filter": 0,
+      "n_final_matched_edges": 0,
+      "per_edge_entered_count": null,
+      "final_matched_edge_ids": []
+    },
+    {
+      "corridor": "hampton_blvd",
+      "start_label": "SR 165 Little Creek Rd",
+      "end_label": "SR 406 Terminal Blvd",
+      "adt": 30000,
+      "adt_quality": "G",
+      "k_factor": 0.0776,
+      "peak_hour_volume_bidirectional": 2328.0,
+      "source_objectids": [
+        63406,
+        92045
+      ],
+      "route_common_names": [
+        "VA-337E",
+        "VA-337W"
+      ],
+      "n_candidate_edges_in_corridor": 60,
+      "n_raw_hits": 0,
+      "n_after_min_hits_filter": 0,
+      "n_final_matched_edges": 0,
+      "per_edge_entered_count": null,
+      "final_matched_edge_ids": []
+    },
+    {
+      "corridor": "colley_ave",
+      "start_label": "Princess Anne Rd",
+      "end_label": "21st Street",
+      "adt": 11000,
+      "adt_quality": "G",
+      "k_factor": 0.084,
+      "peak_hour_volume_bidirectional": 924.0000000000001,
+      "source_objectids": [
+        75840
+      ],
+      "route_common_names": [
+        "Colley AVE (PR - City of Norfolk)"
+      ],
+      "n_candidate_edges_in_corridor": 31,
+      "n_raw_hits": 0,
+      "n_after_min_hits_filter": 0,
+      "n_final_matched_edges": 0,
+      "per_edge_entered_count": null,
+      "final_matched_edge_ids": []
+    }
+  ]
+}
