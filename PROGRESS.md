@@ -12,7 +12,7 @@ slice per loop iteration; the orchestrator verifies before checking it off here.
 | 4 | Information sweep — the headline result | SG2 | **done** |
 | 5 | Web replay of a completed run | SG3 | **done** |
 | 6 | Run from the browser | SG3 | **done** |
-| 7 | Calibrated demand | SG4 | pending |
+| 7 | Calibrated demand | SG4 | **done** |
 | 8 | Sensitivity and robustness | SG4 | pending |
 
 SG5 (live-data upgrade path) is explicitly flagged-not-scheduled in the plan — excluded
@@ -160,3 +160,72 @@ on `main`. `PROGRESS.md` is still orchestrator-owned — subagents never edit it
   screenshots) -- the implementing agent worked around it by driving the real UI
   (button clicks, a real MapLibre map click event) rather than faking evidence; worth a
   manual desktop-browser spot-check before the paper demo, same as Slice 5.
+
+- **2026-08-11, Slice 7 done -- calibrated demand, real VDOT counts.** Before
+  dispatching this slice, the orchestrator independently confirmed VDOT traffic-count
+  data was actually available for this district (a real risk for a slice whose whole
+  point is replacing placeholder demand with real data) by querying VDOT's public
+  ArcGIS "Bidirectional Traffic Volume 2022" feature service directly -- found Colley
+  Ave and Hampton Blvd (filed under state route `VA-337` in this dataset) both have
+  real, high-quality (`A`/`G`) AADT segments inside the district, including one right
+  at ODU. That verified endpoint and query were handed to the implementer instead of
+  leaving data discovery to chance.
+
+  Result: `data/demand/vdot_counts/` (raw fetch + `PROVENANCE.md`: query URL, fetch
+  date, quality-code inclusion rules, AADT->peak-hour `K_FACTOR` conversion) and
+  `data/demand/calibrated_v2/` (routeSampler output + methodology). 88 fetched
+  features -> 20 raw Hampton/Colley records -> 9 deduped segments (VDOT
+  double/triple-counts each physical segment across direction-of-travel entries) ->
+  only 2 actually overlap `data/net/district.net.xml` (VDOT's count segments are
+  bounded by major cross streets kilometers apart; the district happens to sit
+  entirely inside one representative segment per corridor) -> a 3-stage edge-matching
+  filter (corridor restriction + bearing check, hit-count threshold, modal-speed
+  filter, in `src/floodtwin/demand/edge_matching.py`) narrows that to 47 of 948
+  district edges (39 Hampton, 8 Colley) getting a real VDOT-derived count; the other
+  901 are left unconstrained for `routeSampler`, never fabricated. `routeSampler` fit:
+  GEH < 5.0 at 100% of the 47 counted locations, 3,807 vehicles. New `--demand
+  {v1,calibrated_v2}` selector threaded through `runner.py`/`sweep.py`
+  (`paths.DEFAULT_DEMAND_VARIANT = "v1"` preserves all prior slices' behavior;
+  `src/floodtwin/api/` untouched, so Slice 6 is unaffected). [Issue
+  #6](https://github.com/ldocs17/flood-traffic-twin/issues/6), [PR
+  #7](https://github.com/ldocs17/flood-traffic-twin/pull/7). 149/149 tests pass (36
+  new, pure Python -- count parsing, AADT conversion, edge-matching against a fake
+  net, edgeData XML, `PROVENANCE.md` structure -- no SUMO/TF needed).
+
+  **Operational note, same lesson as Slice 4**: the implementing agent launched the
+  5-fraction x 3-seed rerouting sweep for both demand variants as its own background
+  process and then paused mid-task waiting on it. The orchestrator found the `v1`
+  sweep had already finished cleanly (15/15 points) but ran the `calibrated_v2` sweep
+  itself in a separately-monitored background shell rather than trust a
+  subagent-managed background process to survive a turn/session boundary (this
+  session in fact restarted mid-wait; the OS-level process survived because it was
+  orchestrator-launched, independent of any agent session) -- then ran the final
+  `scripts/compare_demand_variants.py` comparison itself and handed the results back
+  to the implementer to write up.
+
+  Verified independently before merging: checked out the branch into a separate
+  worktree, repointed the editable install at it, reran the full suite (149/149).
+  **Cross-checked the committed `raw_query_district.geojson` against the
+  orchestrator's own pre-dispatch VDOT API query** -- exact match on every ADT/quality
+  value for both corridors, confirming the data is real, not fabricated. Read
+  `vdot.py`/`edge_matching.py`/`edgedata.py`/`tests/test_demand.py` in full: quality
+  filtering excludes low-confidence `N` records, dedup surfaces real
+  disagreements (`adt_conflict`) rather than averaging them away, unconstrained edges
+  are never written as a fabricated zero. Re-derived the headline comparison numbers
+  independently and cross-checked the PR's full sweep-by-fraction table against the
+  raw `sweep_summary.json` aggregates -- every number matched exactly. Confirmed
+  `DEFAULT_DEMAND_VARIANT = "v1"` and zero changes to `src/floodtwin/api/` in the
+  diff.
+
+  **Headline finding**: calibrated demand shows ~4x the mean travel-time disruption of
+  the illustrative `v1` random demand (25.2s -> 107.7s) and ~3.5x the p95 tail
+  (110.0s -> 388.0s), holding across the full rerouting sweep (0/25/50/75/100%), with
+  0 teleports/collisions throughout both variants (a real signal, not a simulation
+  artifact). Because `calibrated_v2`'s ~3,807 vehicles are real VDOT-measured traffic
+  that actually uses Hampton Blvd/Colley Ave -- exactly where the flood hits -- while
+  `v1`'s ~1,426 arbitrary-volume vehicles only incidentally touch those corridors,
+  the random-demand baseline used in Slices 1-6 was *understating* real flood
+  disruption, not just an unverified placeholder. `calibrated_v2` is corridor-focused
+  demand (only routes touching a counted edge), not full-district demand like `v1` --
+  documented prominently in `data/demand/calibrated_v2/README.md` as an honest scope
+  limitation, not glossed over.
